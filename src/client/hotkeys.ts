@@ -18,10 +18,24 @@
  * natively, and the question composer submits on Enter itself — acting
  * again would double-fire.
  *
+ * Button resolution skips tool buttons declared as non-hotkey targets: any
+ * plugin may mark a button with `data-hotkey="none"` (e.g. a diff collapse
+ * toggle injected ahead of the action row) to opt it out of Enter/Esc
+ * position-based resolution — so the hotkeys only ever land on the panel's
+ * real confirm/cancel actions.
+ *
  * @module dsh-approval-hotkeys/hotkeys
  */
 
 import type { SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
+
+/**
+ * Selector for opt-out utility controls (tool buttons, decorative buttons)
+ * that must not be treated as hotkey targets. Any plugin can mark a button
+ * with this attribute (e.g. a diff collapse toggle) to exclude it from
+ * position-based Enter/Esc resolution.
+ */
+const HOTKEY_IGNORE = '[data-hotkey="none"]'
 
 /** How to locate a panel's confirm / cancel button. */
 type ButtonLocator = 'first' | 'last' | 'header-last' | 'footer-last' | 'footer-second-last'
@@ -96,6 +110,11 @@ export function findPanel(session: SessionFace | undefined): { element: HTMLElem
   return null
 }
 
+/** The panel's buttons, excluding opt-out utility controls (e.g. a diff collapse toggle). */
+function buttonsOf(scope: ParentNode): NodeListOf<HTMLButtonElement> {
+  return scope.querySelectorAll<HTMLButtonElement>(`button:not(${HOTKEY_IGNORE})`)
+}
+
 /** Resolve one button inside the panel by locator; enabled buttons only. */
 function locateButton(panel: HTMLElement, locator: ButtonLocator): HTMLButtonElement | null {
   let list: NodeListOf<HTMLButtonElement>
@@ -103,10 +122,10 @@ function locateButton(panel: HTMLElement, locator: ButtonLocator): HTMLButtonEle
   if (locator === 'header-last' || locator === 'footer-last' || locator === 'footer-second-last') {
     const scope = panel.querySelector(locator.startsWith('header') ? 'header' : 'footer')
     if (scope === null) return null
-    list = scope.querySelectorAll('button')
+    list = buttonsOf(scope)
     index = locator === 'footer-second-last' ? list.length - 2 : list.length - 1
   } else {
-    list = panel.querySelectorAll('button')
+    list = buttonsOf(panel)
     index = locator === 'first' ? 0 : list.length - 1
   }
   const button = list[index]

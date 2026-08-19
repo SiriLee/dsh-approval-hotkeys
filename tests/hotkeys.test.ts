@@ -24,21 +24,34 @@ function clickSpy(button: HTMLButtonElement): ReturnType<typeof vi.spyOn> {
   return vi.spyOn(button, 'click')
 }
 
-/** Approval panel fixture: [Reject] [Allow once] — reject first, primary last. */
-function makeApprovalPanel(key = 'approval:1'): {
+/** Approval panel fixture: [Reject] [Allow once] — reject first, primary last.
+ * With `withCollapse`, a `data-hotkey="none"` utility button (e.g. a diff
+ * collapse toggle) is injected ahead of the action row, mirroring the
+ * dsh-edit-approval contract. */
+function makeApprovalPanel(
+  key = 'approval:1',
+  withCollapse = false,
+): {
   root: HTMLElement
   reject: HTMLButtonElement
   allowOnce: HTMLButtonElement
+  collapse?: HTMLButtonElement
 } {
   const root = document.createElement('div')
   root.setAttribute('data-approval-key', key)
+  const collapse = withCollapse ? document.createElement('button') : undefined
+  if (collapse !== undefined) {
+    collapse.textContent = 'Collapse'
+    collapse.setAttribute('data-hotkey', 'none')
+  }
   const reject = document.createElement('button')
   reject.textContent = 'Reject'
   const allowOnce = document.createElement('button')
   allowOnce.textContent = 'Allow once'
+  if (collapse !== undefined) root.append(collapse)
   root.append(reject, allowOnce)
   document.body.append(root)
-  return { root, reject, allowOnce }
+  return { root, reject, allowOnce, collapse }
 }
 
 /** Question composer fixture: header (minimize, discard) + footer (skip, submit). */
@@ -307,5 +320,29 @@ describe('panel resolution', () => {
     const action = dispatch(keyEvent('Escape', document.body), session)
     expect(action).toBe('cancel')
     expect(spy).toHaveBeenCalledOnce()
+  })
+})
+
+describe('data-hotkey="none" opt-out buttons', () => {
+  it('Esc clicks Reject, not the leading utility button', () => {
+    const { reject, collapse } = makeApprovalPanel('approval:1', true)
+    const rejectSpy = clickSpy(reject)
+    const collapseSpy = clickSpy(collapse!)
+    const session = sessionOf({ pending: [{ kind: 'approval', key: 'approval:1' }] })
+    const action = dispatch(keyEvent('Escape', document.body), session)
+    expect(action).toBe('cancel')
+    expect(rejectSpy).toHaveBeenCalledOnce()
+    expect(collapseSpy).not.toHaveBeenCalled()
+  })
+
+  it('Enter clicks Allow once, not the leading utility button', () => {
+    const { allowOnce, collapse } = makeApprovalPanel('approval:1', true)
+    const allowOnceSpy = clickSpy(allowOnce)
+    const collapseSpy = clickSpy(collapse!)
+    const session = sessionOf({ pending: [{ kind: 'approval', key: 'approval:1' }] })
+    const action = dispatch(keyEvent('Enter', document.body), session)
+    expect(action).toBe('confirm')
+    expect(allowOnceSpy).toHaveBeenCalledOnce()
+    expect(collapseSpy).not.toHaveBeenCalled()
   })
 })
