@@ -67,6 +67,32 @@ dsh plugin --profile web add dsh-approval-hotkeys
 - **组合键与连发不拦截**：`Ctrl/Meta/Alt+键` 与按住连发交给系统。
 - **无面板时 Esc 不拦截**：插件只作用于交互面板，绝不停止/暂停 agent。
 
+### 按钮解析契约（`data-hotkey="none"`）
+
+Enter/Esc 解析按钮**按位置**（第一个 / 最后一个 / header 最后 / footer 最后），
+而非稳定的语义属性——harness 的 `Button` 组件没有可靠的 `data-role` / `data-variant`，
+对不拥有面板 DOM 的 client 插件而言，位置是唯一稳定信号，因此**按钮顺序是与 harness
+布局唯一的耦合点**。
+
+当**其他插件**向面板注入按钮（工具开关、装饰控件）时，为了让这个耦合保持安全，本插件
+解析确认/取消按钮时会**跳过带 `data-hotkey="none"` 标记的按钮**。任何向交互面板添加
+非操作按钮的插件，**应当**打上这个标记：
+
+```html
+<button data-hotkey="none">折叠 diff</button>
+```
+
+这是一个**协作式、opt-out 的契约，而不是硬保证**。它能可靠覆盖「插件在动作行前
+额外插入一个非操作按钮」这一类（例如 dsh-edit-approval 的 diff 折叠按钮）；但**不**覆盖：
+
+- 插件注入按钮却**不遵守标记**（契约被无视），或
+- 插件在真正的确认/取消按钮之间**重排 / 插入可操作按钮**（语义变了，不只是加了装饰），或
+- harness 自身改变面板布局。
+
+这些情况需要在 harness 面板 DOM 上引入稳定的语义锚点（例如
+`data-role="confirm"` / `data-role="cancel"`）——那是 harness 仓库的改动，不是
+client 插件能解决的。真遇到时请向 deepseek-harness 提 issue / PR。
+
 ### 设计要点
 
 - 纯浏览器（client）插件：host 半边是空桩；全部行为是注册在单个 `ctx.effect` 里的

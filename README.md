@@ -83,6 +83,37 @@ when the host side did not change). No configuration, no settings page.
 - **Esc with no panel**: left alone — the plugin never stops or pauses the
   agent; panels are the only surface it acts on.
 
+### Button resolution contract (`data-hotkey="none"`)
+
+Enter/Esc resolve their buttons **by position** (first / last / header-last /
+footer-last), not by a stable semantic attribute — the harness's `Button`
+component exposes no reliable `data-role`/`data-variant`, so position is the
+only stable signal available to a client plugin that does not own the panel
+DOM. That makes button order the single coupling point to the harness layout.
+
+To keep that coupling safe when **other plugins** inject buttons into a panel
+(utility toggles, decorative controls), this plugin skips any button marked
+`data-hotkey="none"` when resolving the confirm/cancel action. Any plugin that
+adds a non-action button into an interaction panel **should** mark it:
+
+```html
+<button data-hotkey="none">Collapse diff</button>
+```
+
+This is a **cooperative, opt-out contract**, not a hard guarantee. It reliably
+covers "a plugin inserts an extra non-action button ahead of the action row"
+(such as dsh-edit-approval's diff collapse toggle). It does **not** cover:
+
+- a plugin that injects a button **without** the marker (contract ignored), or
+- a plugin that **reorders / inserts a genuinely actionable button** among the
+  real confirm/cancel buttons (the semantics changed, not just a decoration
+  added), or
+- a change to the harness's own panel layout.
+
+Those cases need a stable semantic anchor in the harness panel DOM (e.g.
+`data-role="confirm"` / `data-role="cancel"`) — a harness-repo change, not a
+client-plugin fix. File an issue / PR against deepseek-harness if it bites.
+
 ### Design notes
 
 - Pure browser (client) plugin: the host half is a no-op stub. All behavior
