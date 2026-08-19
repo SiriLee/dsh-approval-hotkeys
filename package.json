@@ -1,6 +1,6 @@
 {
   "name": "dsh-approval-hotkeys",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "DeepSeek Harness plugin: panel hotkeys for every interaction panel — Enter presses the confirm (primary) button, Esc presses the cancel button (approval, question/choice, plan review; Claude Code habits).",
   "keywords": [
     "deepseek-harness",
