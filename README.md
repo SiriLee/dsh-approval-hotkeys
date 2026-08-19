@@ -21,9 +21,32 @@ interaction the GUI shows — edit approvals, permission escalations, tool
 questions, plan reviews. This is the Claude Code habit: confirm with Enter,
 refuse with Esc.
 
-<img src="assets/screenshots/approval-panel.png" width="780" alt="Approval panel — Enter: Allow once, Esc: Reject"/>
-<img src="assets/screenshots/question-panel.png" width="780" alt="Question/choice panel — Enter: Submit, Esc: Discard the group"/>
-<img src="assets/screenshots/plan-review-panel.png" width="780" alt="Plan review panel — Enter: Approve, Esc: Decline"/>
+### Approval panel
+
+Every approval — edits, permission escalations, anything routed through the
+ApprovalPanel. **Enter** presses *Allow once*, **Esc** presses *Reject*.
+
+<p align="center">
+  <img src="assets/screenshots/approval-panel.png" width="680" alt="Approval panel — Enter: Allow once, Esc: Reject"/>
+</p>
+
+### Question / choice panel
+
+Tool questions (`ask_user_question`). **Enter** presses *Submit / Next*,
+**Esc** presses *Discard the group*.
+
+<p align="center">
+  <img src="assets/screenshots/question-panel.png" width="680" alt="Question panel — Enter: Submit, Esc: Discard the group"/>
+</p>
+
+### Plan review panel
+
+**Enter** presses *Approve*, **Esc** presses *Decline* (or *Discuss* when
+the panel has no decline action).
+
+<p align="center">
+  <img src="assets/screenshots/plan-review-panel.png" width="680" alt="Plan review panel — Enter: Approve, Esc: Decline"/>
+</p>
 
 ## Install
 
