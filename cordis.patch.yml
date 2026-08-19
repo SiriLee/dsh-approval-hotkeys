@@ -1,0 +1,10 @@
+# dsh-approval-hotkeys bundle layer.
+#
+# Inserts the plugin row into the web profile bundle roster. The plugin is a
+# pure client half (browser-only): the host entry is a no-op stub that keeps
+# the package loadable by the dsh CLI's cordis loader; all behavior lives in
+# the `dsh.client` web entry (`exports["./client"]`), which the harness web
+# app loads via the ModuleLoader handoff.
+- insert:
+    - id: dsh-approval-hotkeys
+      name: dsh-approval-hotkeys
