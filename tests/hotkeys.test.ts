@@ -4,7 +4,7 @@
  *
  * jsdom provides a real DOM (real buttons, real click() calls, real event
  * targets); the session face is stubbed to the minimal surface the dispatch
- * reads (`getSnapshot().pending/running`, `cancel()`). The panel fixtures
+ * reads (`getSnapshot().pending`, `cancel()`). The panel fixtures
  * mirror the harness layout contract: the confirm (primary) button is the
  * last button of its row.
  */
@@ -253,45 +253,21 @@ describe('Esc → cancel', () => {
     expect(spy).not.toHaveBeenCalled()
   })
 
-  it('prefers panel cancel over pause when both a panel and a running agent exist', () => {
+  it('does nothing when no panel is present, even while the agent runs (no pause feature)', () => {
+    const session = sessionOf({ running: true })
+    const action = dispatch(keyEvent('Escape', document.body), session)
+    expect(action).toBe('none')
+    expect(cancelSpy(session)).not.toHaveBeenCalled()
+  })
+
+  it('does nothing while typing in the composer textarea even with a panel open', () => {
     const { reject } = makeApprovalPanel()
     const spy = clickSpy(reject)
-    const session = sessionOf({ running: true, pending: [{ kind: 'approval', key: 'approval:1' }] })
-    const action = dispatch(keyEvent('Escape', document.body), session)
-    expect(action).toBe('cancel')
-    expect(spy).toHaveBeenCalledOnce()
-    expect(cancelSpy(session)).not.toHaveBeenCalled()
-  })
-})
-
-describe('Esc → pause', () => {
-  it('cancels the running turn when no panel is present and the agent runs', () => {
-    const session = sessionOf({ running: true })
-    const action = dispatch(keyEvent('Escape', document.body), session)
-    expect(action).toBe('pause')
-    expect(cancelSpy(session)).toHaveBeenCalledOnce()
-  })
-
-  it('does nothing when the agent is idle', () => {
-    const session = sessionOf({ running: false })
-    const action = dispatch(keyEvent('Escape', document.body), session)
+    const textarea = document.createElement('textarea')
+    document.body.append(textarea)
+    const action = dispatch(keyEvent('Escape', textarea), sessionOf())
     expect(action).toBe('none')
-    expect(cancelSpy(session)).not.toHaveBeenCalled()
-  })
-
-  it('does nothing with no session selected', () => {
-    const action = dispatch(keyEvent('Escape', document.body), undefined)
-    expect(action).toBe('none')
-  })
-
-  it('does not pause while a modal dialog is open (Esc belongs to the dialog)', () => {
-    const dialog = document.createElement('div')
-    dialog.setAttribute('role', 'dialog')
-    document.body.append(dialog)
-    const session = sessionOf({ running: true })
-    const action = dispatch(keyEvent('Escape', document.body), session)
-    expect(action).toBe('none')
-    expect(cancelSpy(session)).not.toHaveBeenCalled()
+    expect(spy).not.toHaveBeenCalled()
   })
 })
 

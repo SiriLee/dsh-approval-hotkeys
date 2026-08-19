@@ -13,7 +13,6 @@
 | 审批 `[data-approval-key]` | 允许一次 | 拒绝 |
 | 选择/提问 `[data-question-key]` | 提交/下一题 | 放弃整组 |
 | 计划审查 `[data-plan-review-key]` | 确认执行 | 拒绝（无拒绝则去聊天） |
-| 无面板且 agent 运行中 | — | **暂停**（停止当前回合，排队消息保留） |
 
 面板锚点均为 harness 通用锚点，因此快捷键对 GUI 展示的**一切交互**生效——编辑审批、权限升级、
 工具提问、计划审查。这就是 Claude Code 的手感：Enter 确认，Esc 取消。
@@ -32,9 +31,8 @@ dsh plugin --profile web add dsh-approval-hotkeys
   「确认执行」）。harness 的 `Button` 组件没有稳定的 `data-variant` 属性（variant 只是 CSS
   Modules 的 hash class），因此插件锚定布局契约：**确认动作总是渲染在最后**——正是那个主色按钮。
 - **Esc → 取消**：点击面板的取消按钮——审批=第一个（拒绝）、选择=header 最后（放弃整组）、
-  计划审查=footer 倒数第二（拒绝；无拒绝按钮时退化为「去聊天」）。
-- **Esc → 暂停**：调用 `session.cancel()`——与 GUI「停止生成」按钮同一个动词；
-  停止当前回合，之后排队消息按 FIFO 继续。
+  计划审查=footer 倒数第二（拒绝；无拒绝按钮时退化为「去聊天」）。无面板时 Esc 不拦截
+  （不做暂停/停止——那是 GUI「停止生成」按钮与既有快捷键的职责）。
 
 ### 守卫（刻意不做的事）
 
@@ -43,8 +41,7 @@ dsh plugin --profile web add dsh-approval-hotkeys
 - **焦点在按钮上时 Enter 不拦截**：交给浏览器原生激活聚焦按钮、以及面板自身
   （选择弹窗的选项自带 Enter 提交）——再处理会双重触发。
 - **组合键与连发不拦截**：`Ctrl/Meta/Alt+键` 与按住连发交给系统。
-- **弹窗下不暂停**：`role="dialog"` 覆盖层（如设置页）打开时，`Esc` 属于弹窗。
-- **面板优先**：面板在场时 `Esc` 永远取消，绝不暂停。
+- **无面板时 Esc 不拦截**：插件只作用于交互面板，绝不停止/暂停 agent。
 
 ### 设计要点
 

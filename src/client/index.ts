@@ -5,8 +5,8 @@
  * interaction hotkeys (see `./hotkeys.ts` for the exact dispatch rules):
  * Enter presses the confirm (primary) button of any harness interaction
  * panel — approval, question/choice, plan review — and Esc presses its
- * cancel button; with no panel present, Esc pauses a running agent. No
- * settings, no commands, no host logic: the plugin is deliberately minimal.
+ * cancel button. No settings, no commands, no host logic: the plugin is
+ * deliberately minimal.
  *
  * All side effects live inside a single `ctx.effect`, so plugin unload / HMR
  * tears the listener down. `export const inject = ['sessions']` is REQUIRED:
@@ -24,7 +24,7 @@ import { dispatch } from './hotkeys.ts'
 /** Stable plugin name. */
 export const name = 'dsh-approval-hotkeys/client'
 
-/** Required services: sessions (current session face, running state, pending approvals). */
+/** Required services: sessions (current session face, pending approvals). */
 export const inject = ['sessions']
 
 /** Resolve the current session face (approval panels render within it). */

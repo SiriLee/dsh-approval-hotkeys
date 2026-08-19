@@ -1,7 +1,7 @@
 {
   "name": "dsh-approval-hotkeys",
   "version": "0.1.0",
-  "description": "DeepSeek Harness plugin: approval-panel hotkeys for every approval source — Enter approves once, Esc rejects the pending approval, Esc pauses a running agent (Claude Code habits).",
+  "description": "DeepSeek Harness plugin: panel hotkeys for every interaction panel — Enter presses the confirm (primary) button, Esc presses the cancel button (approval, question/choice, plan review; Claude Code habits).",
   "keywords": [
     "deepseek-harness",
     "dsh",

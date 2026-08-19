@@ -15,7 +15,6 @@ renders.
 | Approval (`[data-approval-key]`) | Allow once | Reject |
 | Question / choice (`[data-question-key]`) | Submit / Next | Discard the group |
 | Plan review (`[data-plan-review-key]`) | Approve | Decline (or discuss) |
-| No panel, agent running | — | **Pause** (stop the turn; queued work preserved) |
 
 The panel anchors are harness-generic, so the hotkeys work on every
 interaction the GUI shows — edit approvals, permission escalations, tool
@@ -41,10 +40,8 @@ when the host side did not change). No configuration, no settings page.
   primary-colored button.
 - **Esc → cancel**: clicks the panel's cancel button — Reject (first),
   Discard (header), Decline (footer second-last, or Discuss when the panel
-  has no decline action).
-- **Esc → pause**: calls `session.cancel()` — the same verb as the GUI's
-  *stop generating* button; the running turn stops and pending queued
-  messages resume in FIFO order afterwards.
+  has no decline action). Without a panel, Esc is left alone (no pause/stop
+  binding — the GUI's own stop button and shortcuts own that).
 
 ### Guards (what the plugin deliberately does NOT do)
 
@@ -56,10 +53,8 @@ when the host side did not change). No configuration, no settings page.
   options submit on Enter) — acting again would double-fire.
 - **Never on chords or repeats**: `Ctrl/Meta/Alt+key` combinations and
   held-key repeats are left alone.
-- **Esc never pauses under a dialog**: while a `role="dialog"` overlay (e.g.
-  settings) is open, `Esc` belongs to the dialog.
-- **Panel wins over pause**: with a panel open, `Esc` always cancels — it
-  never pauses.
+- **Esc with no panel**: left alone — the plugin never stops or pauses the
+  agent; panels are the only surface it acts on.
 
 ### Design notes
 

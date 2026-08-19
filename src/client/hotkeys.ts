@@ -8,19 +8,15 @@
  *   Enter → confirm  — click the panel's confirm button (the right-most /
  *                      primary action: "Allow once", "Submit", "Approve").
  *   Esc   → cancel   — click the panel's cancel button (reject / discard /
- *                      decline) while a panel is present.
- *   Esc   → pause    — `session.cancel()` (stop the running turn; queued
- *                      work is preserved) when no panel is present and the
- *                      agent is running.
+ *                      decline).
  *   none  → leave the event alone.
  *
  * Guards: synthetic repeats, Ctrl/Meta/Alt chords, and keystrokes inside
  * editable seats (composer textarea, inputs, contentEditable) are never
- * ours — the composer owns Enter and Esc there. While a `role="dialog"`
- * overlay is open, Esc belongs to the dialog (e.g. the settings page).
- * Enter with focus on a button is also left alone: the browser activates
- * the focused button natively, and the question composer submits on Enter
- * itself — acting again would double-fire.
+ * ours — the composer owns Enter and Esc there. Enter with focus on a
+ * button is also left alone: the browser activates the focused button
+ * natively, and the question composer submits on Enter itself — acting
+ * again would double-fire.
  *
  * @module dsh-approval-hotkeys/hotkeys
  */
@@ -56,11 +52,8 @@ const PANEL_KINDS: readonly PanelKind[] = [
   { selector: '[data-plan-review-key]', keyAttr: 'plan-review', confirm: 'footer-last', cancel: 'footer-second-last' },
 ]
 
-/** Modal overlays: while one is open, Esc belongs to the dialog, not to us. */
-const DIALOG_SELECTOR = '[role="dialog"]'
-
 /** The outcome of one keydown dispatch. */
-export type HotkeyAction = 'confirm' | 'cancel' | 'pause' | 'none'
+export type HotkeyAction = 'confirm' | 'cancel' | 'none'
 
 /** Editable seats where Enter/Esc belong to the composer / inputs, not to us. */
 function isEditable(target: EventTarget | null): boolean {
@@ -140,22 +133,11 @@ export function dispatch(event: KeyboardEvent, session: SessionFace | undefined)
     return 'confirm'
   }
   if (event.key === 'Escape') {
-    if (panel !== null) {
-      const cancel = locateButton(panel.element, panel.kind.cancel)
-      if (cancel === null) return 'none'
-      cancel.click()
-      return 'cancel'
-    }
-    if (
-      session !== undefined &&
-      session.getSnapshot().running &&
-      document.querySelector(DIALOG_SELECTOR) === null
-    ) {
-      // Pause: stop the running turn; pending queued work stays and resumes
-      // in FIFO order once the host reaches cancellation quiescence.
-      void session.cancel()
-      return 'pause'
-    }
+    if (panel === null) return 'none'
+    const cancel = locateButton(panel.element, panel.kind.cancel)
+    if (cancel === null) return 'none'
+    cancel.click()
+    return 'cancel'
   }
   return 'none'
 }
