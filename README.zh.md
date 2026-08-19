@@ -5,17 +5,18 @@
 
 > [English](README.md) | 中文
 
-刻意保持极简：两个键，两处场景。
+刻意保持极简，一条通用规则：**Enter 总是按下确认按钮（primary 主色、动作行最右）；Esc 总是按下取消按钮**——
+作用于 harness 渲染的每一类带按钮交互面板。
 
-| 按键 | 场景 | 动作 |
+| 面板 | Enter → 确认 | Esc → 取消 |
 | --- | --- | --- |
-| `Enter` | 审批面板在场 | **允许一次**（点击「允许一次」） |
-| `Esc` | 审批面板在场 | **拒绝**（点击「拒绝」） |
-| `Esc` | 无面板且 agent 运行中 | **暂停**（停止当前回合，排队消息保留） |
+| 审批 `[data-approval-key]` | 允许一次 | 拒绝 |
+| 选择/提问 `[data-question-key]` | 提交/下一题 | 放弃整组 |
+| 计划审查 `[data-plan-review-key]` | 确认执行 | 拒绝（无拒绝则去聊天） |
+| 无面板且 agent 运行中 | — | **暂停**（停止当前回合，排队消息保留） |
 
-审批面板的 `[data-approval-key]` 锚点是 harness 通用锚点，因此快捷键对 GUI 展示的
-**一切审批**生效——编辑审批、权限升级、任何走 ApprovalPanel 的请求。这就是 Claude Code
-的手感：Enter 放行，Esc 拒绝。
+面板锚点均为 harness 通用锚点，因此快捷键对 GUI 展示的**一切交互**生效——编辑审批、权限升级、
+工具提问、计划审查。这就是 Claude Code 的手感：Enter 确认，Esc 取消。
 
 ## 安装
 
@@ -27,8 +28,11 @@ dsh plugin --profile web add dsh-approval-hotkeys
 
 ## 原理
 
-- **Enter → 允许一次**：点击面板最后一个按钮（「允许一次」）。
-- **Esc → 拒绝**：点击面板第一个按钮（「拒绝」）。
+- **Enter → 确认**：点击面板的 primary 按钮——动作行最后一个按钮（「允许一次」/「提交/下一题」/
+  「确认执行」）。harness 的 `Button` 组件没有稳定的 `data-variant` 属性（variant 只是 CSS
+  Modules 的 hash class），因此插件锚定布局契约：**确认动作总是渲染在最后**——正是那个主色按钮。
+- **Esc → 取消**：点击面板的取消按钮——审批=第一个（拒绝）、选择=header 最后（放弃整组）、
+  计划审查=footer 倒数第二（拒绝；无拒绝按钮时退化为「去聊天」）。
 - **Esc → 暂停**：调用 `session.cancel()`——与 GUI「停止生成」按钮同一个动词；
   停止当前回合，之后排队消息按 FIFO 继续。
 
@@ -36,9 +40,11 @@ dsh plugin --profile web add dsh-approval-hotkeys
 
 - **输入中不拦截**：焦点在 input / textarea / select / contentEditable 时交还输入框
   （`Enter` 发送、`Shift+Enter` 换行、`Esc` 收起联想都属于输入框）。
+- **焦点在按钮上时 Enter 不拦截**：交给浏览器原生激活聚焦按钮、以及面板自身
+  （选择弹窗的选项自带 Enter 提交）——再处理会双重触发。
 - **组合键与连发不拦截**：`Ctrl/Meta/Alt+键` 与按住连发交给系统。
 - **弹窗下不暂停**：`role="dialog"` 覆盖层（如设置页）打开时，`Esc` 属于弹窗。
-- **面板优先**：面板在场时 `Esc` 永远拒绝，绝不暂停。
+- **面板优先**：面板在场时 `Esc` 永远取消，绝不暂停。
 
 ### 设计要点
 

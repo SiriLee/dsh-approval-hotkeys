@@ -1,10 +1,12 @@
 /**
  * dsh-approval-hotkeys — browser half.
  *
- * Mounts one document-level `keydown` listener that implements the approval
- * hotkeys (see `./hotkeys.ts` for the exact dispatch rules). No settings, no
- * commands, no host logic: the plugin is deliberately minimal — two keys,
- * two scenarios.
+ * Mounts one document-level `keydown` listener that implements the
+ * interaction hotkeys (see `./hotkeys.ts` for the exact dispatch rules):
+ * Enter presses the confirm (primary) button of any harness interaction
+ * panel — approval, question/choice, plan review — and Esc presses its
+ * cancel button; with no panel present, Esc pauses a running agent. No
+ * settings, no commands, no host logic: the plugin is deliberately minimal.
  *
  * All side effects live inside a single `ctx.effect`, so plugin unload / HMR
  * tears the listener down. `export const inject = ['sessions']` is REQUIRED:

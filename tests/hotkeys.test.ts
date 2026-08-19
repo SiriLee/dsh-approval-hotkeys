@@ -4,11 +4,13 @@
  *
  * jsdom provides a real DOM (real buttons, real click() calls, real event
  * targets); the session face is stubbed to the minimal surface the dispatch
- * reads (`getSnapshot().pending/running`, `cancel()`).
+ * reads (`getSnapshot().pending/running`, `cancel()`). The panel fixtures
+ * mirror the harness layout contract: the confirm (primary) button is the
+ * last button of its row.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
-import { dispatch, findApprovalPanel } from '../src/client/hotkeys.ts'
+import { dispatch, findPanel } from '../src/client/hotkeys.ts'
 
 /** A keydown event whose target is pinned to `target` (jsdom cannot set it in the init dict). */
 function keyEvent(key: string, target: EventTarget | null, init: KeyboardEventInit = {}): KeyboardEvent {
@@ -17,8 +19,13 @@ function keyEvent(key: string, target: EventTarget | null, init: KeyboardEventIn
   return event
 }
 
-/** A bare approval panel with reject (first) + allow-once (last) buttons, appended to the DOM. */
-function makePanel(key = 'approval:1'): {
+/** Spy on a button's click() so assertions survive jsdom (no `clicked` property). */
+function clickSpy(button: HTMLButtonElement): ReturnType<typeof vi.spyOn> {
+  return vi.spyOn(button, 'click')
+}
+
+/** Approval panel fixture: [Reject] [Allow once] — reject first, primary last. */
+function makeApprovalPanel(key = 'approval:1'): {
   root: HTMLElement
   reject: HTMLButtonElement
   allowOnce: HTMLButtonElement
@@ -34,9 +41,57 @@ function makePanel(key = 'approval:1'): {
   return { root, reject, allowOnce }
 }
 
-/** Spy on a button's click() so assertions survive jsdom (no `clicked` property). */
-function clickSpy(button: HTMLButtonElement): ReturnType<typeof vi.spyOn> {
-  return vi.spyOn(button, 'click')
+/** Question composer fixture: header (minimize, discard) + footer (skip, submit). */
+function makeQuestionPanel(key = 'question:1'): {
+  root: HTMLElement
+  minimize: HTMLButtonElement
+  discard: HTMLButtonElement
+  skip: HTMLButtonElement
+  submit: HTMLButtonElement
+} {
+  const root = document.createElement('div')
+  root.setAttribute('data-question-key', key)
+  const header = document.createElement('header')
+  const minimize = document.createElement('button')
+  minimize.textContent = 'Minimize'
+  const discard = document.createElement('button')
+  discard.textContent = 'Discard'
+  header.append(minimize, discard)
+  const footer = document.createElement('footer')
+  const skip = document.createElement('button')
+  skip.textContent = 'Skip'
+  const submit = document.createElement('button')
+  submit.textContent = 'Submit'
+  footer.append(skip, submit)
+  root.append(header, footer)
+  document.body.append(root)
+  return { root, minimize, discard, skip, submit }
+}
+
+/** Plan review fixture: footer (discuss, decline, approve). */
+function makePlanPanel(key = 'plan-review:1', withDecline = true): {
+  root: HTMLElement
+  discuss: HTMLButtonElement
+  decline?: HTMLButtonElement
+  approve: HTMLButtonElement
+} {
+  const root = document.createElement('div')
+  root.setAttribute('data-plan-review-key', key)
+  const footer = document.createElement('footer')
+  const discuss = document.createElement('button')
+  discuss.textContent = 'Discuss'
+  footer.append(discuss)
+  const decline = withDecline ? document.createElement('button') : undefined
+  if (decline !== undefined) {
+    decline.textContent = 'Decline'
+    footer.append(decline)
+  }
+  const approve = document.createElement('button')
+  approve.textContent = 'Approve'
+  footer.append(approve)
+  root.append(footer)
+  document.body.append(root)
+  return { root, discuss, decline, approve }
 }
 
 interface PendingLike {
@@ -62,18 +117,35 @@ beforeEach(() => {
   document.body.innerHTML = ''
 })
 
-describe('Enter → approve once', () => {
-  it('clicks the allow-once button (last) and reports approve', () => {
-    const { allowOnce } = makePanel()
+describe('Enter → confirm (the primary button)', () => {
+  it('approval panel: clicks the allow-once button (last) and reports confirm', () => {
+    const { allowOnce } = makeApprovalPanel()
     const spy = clickSpy(allowOnce)
     const session = sessionOf({ pending: [{ kind: 'approval', key: 'approval:1' }] })
     const action = dispatch(keyEvent('Enter', document.body), session)
-    expect(action).toBe('approve')
+    expect(action).toBe('confirm')
     expect(spy).toHaveBeenCalledOnce()
   })
 
-  it('does nothing when the allow-once button is disabled (already answered)', () => {
-    const { allowOnce } = makePanel()
+  it('question panel: clicks the submit button (footer last) and reports confirm', () => {
+    const { submit } = makeQuestionPanel()
+    const spy = clickSpy(submit)
+    const session = sessionOf({ pending: [{ kind: 'question', key: 'question:1' }] })
+    const action = dispatch(keyEvent('Enter', document.body), session)
+    expect(action).toBe('confirm')
+    expect(spy).toHaveBeenCalledOnce()
+  })
+
+  it('plan review: clicks the approve button (footer last) and reports confirm', () => {
+    const { approve } = makePlanPanel()
+    const spy = clickSpy(approve)
+    const action = dispatch(keyEvent('Enter', document.body), sessionOf())
+    expect(action).toBe('confirm')
+    expect(spy).toHaveBeenCalledOnce()
+  })
+
+  it('does nothing when the confirm button is disabled', () => {
+    const { allowOnce } = makeApprovalPanel()
     allowOnce.disabled = true
     const spy = clickSpy(allowOnce)
     const action = dispatch(keyEvent('Enter', document.body), sessionOf())
@@ -81,13 +153,27 @@ describe('Enter → approve once', () => {
     expect(spy).not.toHaveBeenCalled()
   })
 
-  it('does nothing when no approval panel is present', () => {
+  it('does nothing when no panel is present', () => {
     const action = dispatch(keyEvent('Enter', document.body), sessionOf())
     expect(action).toBe('none')
   })
 
+  it('does nothing when focus sits on a button (native activation / built-in Enter owns it)', () => {
+    const { reject } = makeApprovalPanel()
+    const rejectSpy = clickSpy(reject)
+    const { allowOnce } = makeApprovalPanel('approval:2')
+    const allowOnceSpy = clickSpy(allowOnce)
+    // Focus on the question option-like button: Enter must not double-fire.
+    const option = document.createElement('button')
+    document.body.append(option)
+    const action = dispatch(keyEvent('Enter', option), sessionOf())
+    expect(action).toBe('none')
+    expect(rejectSpy).not.toHaveBeenCalled()
+    expect(allowOnceSpy).not.toHaveBeenCalled()
+  })
+
   it('ignores Enter while typing in the composer textarea even with a panel open', () => {
-    const { allowOnce } = makePanel()
+    const { allowOnce } = makeApprovalPanel()
     const spy = clickSpy(allowOnce)
     const textarea = document.createElement('textarea')
     document.body.append(textarea)
@@ -97,7 +183,7 @@ describe('Enter → approve once', () => {
   })
 
   it('ignores chorded Enter (Ctrl/Cmd+Enter is the composer queue shortcut)', () => {
-    const { allowOnce } = makePanel()
+    const { allowOnce } = makeApprovalPanel()
     const spy = clickSpy(allowOnce)
     const action = dispatch(keyEvent('Enter', document.body, { ctrlKey: true }), sessionOf())
     expect(action).toBe('none')
@@ -105,31 +191,76 @@ describe('Enter → approve once', () => {
   })
 
   it('ignores synthetic repeats', () => {
-    const { allowOnce } = makePanel()
+    const { allowOnce } = makeApprovalPanel()
     const spy = clickSpy(allowOnce)
     const action = dispatch(keyEvent('Enter', document.body, { repeat: true }), sessionOf())
     expect(action).toBe('none')
     expect(spy).not.toHaveBeenCalled()
   })
+
+  it('question panel minimized: no footer → no confirm button → nothing happens', () => {
+    const { root, discard } = makeQuestionPanel()
+    // Simulate the minimized state: footer unmounted, header remains.
+    root.querySelector('footer')?.remove()
+    const discardSpy = clickSpy(discard)
+    const action = dispatch(keyEvent('Enter', document.body), sessionOf())
+    expect(action).toBe('none')
+    expect(discardSpy).not.toHaveBeenCalled()
+  })
 })
 
-describe('Esc → reject', () => {
-  it('clicks the reject button (first) and reports reject', () => {
-    const { reject } = makePanel()
+describe('Esc → cancel', () => {
+  it('approval panel: clicks the reject button (first) and reports cancel', () => {
+    const { reject } = makeApprovalPanel()
     const spy = clickSpy(reject)
     const session = sessionOf({ pending: [{ kind: 'approval', key: 'approval:1' }] })
     const action = dispatch(keyEvent('Escape', document.body), session)
-    expect(action).toBe('reject')
+    expect(action).toBe('cancel')
     expect(spy).toHaveBeenCalledOnce()
   })
 
-  it('does nothing when the reject button is disabled', () => {
-    const { reject } = makePanel()
+  it('question panel: clicks the discard button (header last) and reports cancel', () => {
+    const { discard } = makeQuestionPanel()
+    const spy = clickSpy(discard)
+    const session = sessionOf({ pending: [{ kind: 'question', key: 'question:1' }] })
+    const action = dispatch(keyEvent('Escape', document.body), session)
+    expect(action).toBe('cancel')
+    expect(spy).toHaveBeenCalledOnce()
+  })
+
+  it('plan review: clicks the decline button (footer second-last) and reports cancel', () => {
+    const { decline } = makePlanPanel()
+    const spy = clickSpy(decline!)
+    const action = dispatch(keyEvent('Escape', document.body), sessionOf())
+    expect(action).toBe('cancel')
+    expect(spy).toHaveBeenCalledOnce()
+  })
+
+  it('plan review without a decline action: falls back to discuss (footer second-last)', () => {
+    const { discuss } = makePlanPanel('plan-review:2', false)
+    const spy = clickSpy(discuss)
+    const action = dispatch(keyEvent('Escape', document.body), sessionOf())
+    expect(action).toBe('cancel')
+    expect(spy).toHaveBeenCalledOnce()
+  })
+
+  it('does nothing when the cancel button is disabled', () => {
+    const { reject } = makeApprovalPanel()
     reject.disabled = true
     const spy = clickSpy(reject)
     const action = dispatch(keyEvent('Escape', document.body), sessionOf())
     expect(action).toBe('none')
     expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('prefers panel cancel over pause when both a panel and a running agent exist', () => {
+    const { reject } = makeApprovalPanel()
+    const spy = clickSpy(reject)
+    const session = sessionOf({ running: true, pending: [{ kind: 'approval', key: 'approval:1' }] })
+    const action = dispatch(keyEvent('Escape', document.body), session)
+    expect(action).toBe('cancel')
+    expect(spy).toHaveBeenCalledOnce()
+    expect(cancelSpy(session)).not.toHaveBeenCalled()
   })
 })
 
@@ -162,40 +293,43 @@ describe('Esc → pause', () => {
     expect(action).toBe('none')
     expect(cancelSpy(session)).not.toHaveBeenCalled()
   })
-
-  it('prefers reject over pause when both a panel and a running agent exist', () => {
-    const { reject } = makePanel()
-    const spy = clickSpy(reject)
-    const session = sessionOf({ running: true, pending: [{ kind: 'approval', key: 'approval:1' }] })
-    const action = dispatch(keyEvent('Escape', document.body), session)
-    expect(action).toBe('reject')
-    expect(spy).toHaveBeenCalledOnce()
-    expect(cancelSpy(session)).not.toHaveBeenCalled()
-  })
 })
 
 describe('panel resolution', () => {
   it('prefers the current session’s pending approval key over an earlier panel in DOM order', () => {
-    const first = makePanel('approval:other')
-    const second = makePanel('approval:2')
+    const first = makeApprovalPanel('approval:other')
+    const second = makeApprovalPanel('approval:2')
     const firstSpy = clickSpy(first.allowOnce)
     const secondSpy = clickSpy(second.allowOnce)
     const session = sessionOf({ pending: [{ kind: 'approval', key: 'approval:2' }] })
-    expect(findApprovalPanel(session)).toBe(second.root)
+    expect(findPanel(session)?.element).toBe(second.root)
     const action = dispatch(keyEvent('Enter', document.body), session)
-    expect(action).toBe('approve')
+    expect(action).toBe('confirm')
     expect(firstSpy).not.toHaveBeenCalled()
     expect(secondSpy).toHaveBeenCalledOnce()
   })
 
-  it('falls back to the first panel in DOM order when the session has no approval pending', () => {
-    const first = makePanel('approval:a')
-    makePanel('approval:b')
+  it('prefers the current session’s pending question key over another panel kind in DOM order', () => {
+    const approval = makeApprovalPanel('approval:a')
+    const question = makeQuestionPanel('question:7')
+    const approvalSpy = clickSpy(approval.allowOnce)
+    const questionSpy = clickSpy(question.submit)
+    const session = sessionOf({ pending: [{ kind: 'question', key: 'question:7' }] })
+    expect(findPanel(session)?.element).toBe(question.root)
+    const action = dispatch(keyEvent('Enter', document.body), session)
+    expect(action).toBe('confirm')
+    expect(approvalSpy).not.toHaveBeenCalled()
+    expect(questionSpy).toHaveBeenCalledOnce()
+  })
+
+  it('falls back to the first panel in DOM order when the session has no matching pending', () => {
+    const first = makeApprovalPanel('approval:a')
+    makeQuestionPanel('question:b')
     const spy = clickSpy(first.reject)
     const session = sessionOf({ running: true })
-    expect(findApprovalPanel(session)).toBe(first.root)
+    expect(findPanel(session)?.element).toBe(first.root)
     const action = dispatch(keyEvent('Escape', document.body), session)
-    expect(action).toBe('reject')
+    expect(action).toBe('cancel')
     expect(spy).toHaveBeenCalledOnce()
   })
 })
