@@ -37,6 +37,7 @@
   },
   "files": [
     "lib",
+    "assets",
     "cordis.patch.yml",
     "docs",
     "LICENSE",

@@ -17,6 +17,10 @@
 面板锚点均为 harness 通用锚点，因此快捷键对 GUI 展示的**一切交互**生效——编辑审批、权限升级、
 工具提问、计划审查。这就是 Claude Code 的手感：Enter 确认，Esc 取消。
 
+<img src="assets/screenshots/approval-panel.png" width="780" alt="审批面板 — Enter：允许一次，Esc：拒绝"/>
+<img src="assets/screenshots/question-panel.png" width="780" alt="提问/选择面板 — Enter：提交，Esc：放弃整组"/>
+<img src="assets/screenshots/plan-review-panel.png" width="780" alt="计划审查面板 — Enter：确认执行，Esc：拒绝"/>
+
 ## 安装
 
 ```sh

@@ -21,6 +21,10 @@ interaction the GUI shows — edit approvals, permission escalations, tool
 questions, plan reviews. This is the Claude Code habit: confirm with Enter,
 refuse with Esc.
 
+<img src="assets/screenshots/approval-panel.png" width="780" alt="Approval panel — Enter: Allow once, Esc: Reject"/>
+<img src="assets/screenshots/question-panel.png" width="780" alt="Question/choice panel — Enter: Submit, Esc: Discard the group"/>
+<img src="assets/screenshots/plan-review-panel.png" width="780" alt="Plan review panel — Enter: Approve, Esc: Decline"/>
+
 ## Install
 
 ```sh
