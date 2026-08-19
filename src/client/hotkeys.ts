@@ -38,7 +38,7 @@ import type { SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
 const HOTKEY_IGNORE = '[data-hotkey="none"]'
 
 /** How to locate a panel's confirm / cancel button. */
-type ButtonLocator = 'first' | 'last' | 'header-last' | 'footer-last' | 'footer-second-last'
+type ButtonLocator = 'first' | 'last' | 'second-last' | 'header-last' | 'footer-last' | 'footer-second-last'
 
 /** One panel kind: stable DOM anchor + confirm/cancel locators. */
 interface PanelKind {
@@ -56,14 +56,16 @@ interface PanelKind {
 
 /**
  * The panel kinds this plugin understands. The ApprovalPanel renders
- * [Reject] [Allow once]; the QuestionComposer renders a header (minimize,
- * discard) + options + a footer (skip, submit/next); the PlanReviewPanel
- * renders a footer (discuss, decline?, approve).
+ * [Reject] [Allow once]; the QuestionComposer renders a `<header>`
+ * (minimize, discard) + options + a `<footer>` (skip, submit/next); the
+ * PlanReviewPanel renders a plain `<div className="…footer">` (NOT a
+ * `<footer>` tag) holding discuss / decline? / approve — the panel's only
+ * buttons — so it is located panel-wide instead of by tag.
  */
 const PANEL_KINDS: readonly PanelKind[] = [
   { selector: '[data-approval-key]', keyAttr: 'approval', pendingKind: 'approval', confirm: 'last', cancel: 'first' },
   { selector: '[data-question-key]', keyAttr: 'question', pendingKind: 'question', confirm: 'footer-last', cancel: 'header-last' },
-  { selector: '[data-plan-review-key]', keyAttr: 'plan-review', confirm: 'footer-last', cancel: 'footer-second-last' },
+  { selector: '[data-plan-review-key]', keyAttr: 'plan-review', confirm: 'last', cancel: 'second-last' },
 ]
 
 /** The outcome of one keydown dispatch. */
@@ -120,13 +122,19 @@ function locateButton(panel: HTMLElement, locator: ButtonLocator): HTMLButtonEle
   let list: NodeListOf<HTMLButtonElement>
   let index: number
   if (locator === 'header-last' || locator === 'footer-last' || locator === 'footer-second-last') {
+    // Tag-scoped locators: QuestionComposer renders real `<header>`/`<footer>`
+    // tags. PlanReviewPanel does NOT (its footer is a `div`), so it uses the
+    // panel-wide locators below instead.
     const scope = panel.querySelector(locator.startsWith('header') ? 'header' : 'footer')
     if (scope === null) return null
     list = buttonsOf(scope)
     index = locator === 'footer-second-last' ? list.length - 2 : list.length - 1
   } else {
+    // Panel-wide locators: every non-opt-out button in the panel (approval
+    // action row; plan-review's div-footer actions are the panel's only
+    // buttons).
     list = buttonsOf(panel)
-    index = locator === 'first' ? 0 : list.length - 1
+    index = locator === 'first' ? 0 : locator === 'second-last' ? list.length - 2 : list.length - 1
   }
   const button = list[index]
   if (button === undefined) return null

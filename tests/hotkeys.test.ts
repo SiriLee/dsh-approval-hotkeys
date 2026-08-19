@@ -81,7 +81,12 @@ function makeQuestionPanel(key = 'question:1'): {
   return { root, minimize, discard, skip, submit }
 }
 
-/** Plan review fixture: footer (discuss, decline, approve). */
+/**
+ * Plan review fixture. Mirrors the REAL harness DOM: PlanReviewPanel renders
+ * its actions inside a plain `<div className="…footer">`, NOT a `<footer>`
+ * tag (a regression here once made both hotkeys silently dead on the plan
+ * panel while tests stayed green on the tag-based fixture).
+ */
 function makePlanPanel(key = 'plan-review:1', withDecline = true): {
   root: HTMLElement
   discuss: HTMLButtonElement
@@ -90,7 +95,8 @@ function makePlanPanel(key = 'plan-review:1', withDecline = true): {
 } {
   const root = document.createElement('div')
   root.setAttribute('data-plan-review-key', key)
-  const footer = document.createElement('footer')
+  const footer = document.createElement('div')
+  footer.className = 'planFooter'
   const discuss = document.createElement('button')
   discuss.textContent = 'Discuss'
   footer.append(discuss)
