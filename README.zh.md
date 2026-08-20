@@ -1,12 +1,26 @@
 # dsh-approval-hotkeys
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的**审批面板快捷键**插件，
-作用于**所有来源**的审批（不只编辑审批）。
+[![npm version](https://img.shields.io/npm/v/dsh-approval-hotkeys.svg)](https://www.npmjs.com/package/dsh-approval-hotkeys)
+[![npm license](https://img.shields.io/npm/l/dsh-approval-hotkeys.svg)](https://github.com/SiriLee/dsh-approval-hotkeys/blob/main/LICENSE)
 
 > [English](README.md) | 中文
 
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的**审批面板快捷键**插件，
+作用于**所有来源**的审批（不只编辑审批）。
+
 刻意保持极简，一条通用规则：**Enter 总是按下确认按钮（primary 主色、动作行最右）；Esc 总是按下取消按钮**——
-作用于 harness 渲染的每一类带按钮交互面板。
+作用于 harness 渲染的每一类带按钮交互面板。这就是 Claude Code 的手感：Enter 确认，Esc 取消。
+
+## ✨ 特性
+
+| 特性 | 说明 |
+| --- | --- |
+| 覆盖一切交互面板 | 对 GUI 展示的**每个**带按钮面板生效——编辑审批、权限升级、工具提问、计划审查 |
+| **Enter → 确认** | 按下动作行最右的 primary 按钮——「允许一次」/「提交/下一题」/「确认执行」 |
+| **Esc → 取消** | 按下取消按钮——「拒绝」/「放弃整组」/「拒绝」 |
+| 零配置 | 无设置页、无选项——一条通用规则、一个 effect |
+
+面板锚点均为 harness 通用锚点，因此快捷键对 GUI 展示的**一切交互**生效——不只编辑审批。
 
 | 面板 | Enter → 确认 | Esc → 取消 |
 | --- | --- | --- |
@@ -14,34 +28,19 @@
 | 选择/提问 `[data-question-key]` | 提交/下一题 | 放弃整组 |
 | 计划审查 `[data-plan-review-key]` | 确认执行 | 拒绝（无拒绝则去聊天） |
 
-面板锚点均为 harness 通用锚点，因此快捷键对 GUI 展示的**一切交互**生效——编辑审批、权限升级、
-工具提问、计划审查。这就是 Claude Code 的手感：Enter 确认，Esc 取消。
+## 📸 截图
 
-### 审批面板
+<table>
+  <tr>
+    <td align="center"><img src="assets/screenshots/approval-panel.png" width="440" alt="审批面板 — Enter：允许一次，Esc：拒绝"><br><sub>审批面板 — Enter：允许一次，Esc：拒绝</sub></td>
+    <td align="center"><img src="assets/screenshots/question-panel.png" width="440" alt="提问/选择面板 — Enter：提交，Esc：放弃整组"><br><sub>提问/选择面板 — Enter：提交，Esc：放弃整组</sub></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><img src="assets/screenshots/plan-review-panel.png" width="760" alt="计划审查面板 — Enter：确认执行，Esc：拒绝"><br><sub>计划审查面板 — Enter：确认执行，Esc：拒绝（无拒绝则去聊天）</sub></td>
+  </tr>
+</table>
 
-一切审批——编辑、权限升级、任何走 ApprovalPanel 的请求。**Enter** 按下「允许一次」，**Esc** 按下「拒绝」。
-
-<p align="center">
-  <img src="assets/screenshots/approval-panel.png" width="680" alt="审批面板 — Enter：允许一次，Esc：拒绝"/>
-</p>
-
-### 提问/选择面板
-
-工具提问（`ask_user_question`）。**Enter** 按下「提交/下一题」，**Esc** 按下「放弃整组」。
-
-<p align="center">
-  <img src="assets/screenshots/question-panel.png" width="680" alt="提问/选择面板 — Enter：提交，Esc：放弃整组"/>
-</p>
-
-### 计划审查面板
-
-**Enter** 按下「确认执行」，**Esc** 按下「拒绝」（无拒绝按钮时退化为「去聊天」）。
-
-<p align="center">
-  <img src="assets/screenshots/plan-review-panel.png" width="680" alt="计划审查面板 — Enter：确认执行，Esc：拒绝"/>
-</p>
-
-## 安装
+## 📦 安装
 
 ```sh
 dsh plugin --profile web add dsh-approval-hotkeys
@@ -101,6 +100,24 @@ client 插件能解决的。真遇到时请向 deepseek-harness 提 issue / PR�
   既不可能重复应答，按钮顺序也是与 harness 唯一的耦合点。
 - 面板查找优先匹配当前会话的待审批 key，找不到再取 DOM 中第一个面板。
 
+## 兼容性
+
+- Node.js `^22.19.0 || >=24.0.0`。
+- DeepSeek Harness web profile（`dsh --profile web`）；peer `@deepseek-ai/*` 包
+  由 harness 在运行时解析。
+
+> [!WARNING]
+> 本项目与 DSH 均处于开发预览阶段。可复现环境中请固定精确版本，并审阅上文行为说明。
+
+## 不含（Not included）
+
+- **带 diff 预览的逐编辑审批** —— 由姊妹插件
+  [dsh-edit-approval](https://github.com/SiriLee/dsh-edit-approval) 负责。
+- **会话/工作区回退** —— 由姊妹插件
+  [dsh-rewind](https://github.com/SiriLee/dsh-rewind) 负责。
+
+本插件刻意保持单一定位：只管交互面板的快捷键。其余流程交由各自的专用插件。
+
 ## 开发
 
 ```sh
@@ -110,6 +127,9 @@ npm test            # vitest（jsdom 单测，覆盖 dispatch 全部分支）
 npm run build       # esbuild：lib/index.js + lib/client.js + .d.ts
 node scripts/verify-host.mjs
 ```
+
+`prepare` 运行全量构建，因此 git 安装与 `npm pack` / `npm publish` 总是产出完整的
+`lib/`（含 `.d.ts`）与 `LICENSE`。
 
 ## 发布
 

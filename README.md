@@ -1,14 +1,29 @@
 # dsh-approval-hotkeys
 
-Approval-panel hotkeys for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness),
-for **every** approval source — not just edits.
+[![npm version](https://img.shields.io/npm/v/dsh-approval-hotkeys.svg)](https://www.npmjs.com/package/dsh-approval-hotkeys)
+[![npm license](https://img.shields.io/npm/l/dsh-approval-hotkeys.svg)](https://github.com/SiriLee/dsh-approval-hotkeys/blob/main/LICENSE)
 
 > English | [中文](README.zh.md)
+
+Approval-panel hotkeys for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness),
+for **every** approval source — not just edits.
 
 A deliberately minimal plugin with one generic rule: **Enter always presses
 the confirm button (the primary, right-most action); Esc always presses the
 cancel button** — on every button-bearing interaction panel the harness
-renders.
+renders. This is the Claude Code habit: confirm with Enter, refuse with Esc.
+
+## ✨ Features
+
+| Feature | Description |
+| --- | --- |
+| Every interaction panel | Works on every button-bearing panel the GUI shows — edit approvals, permission escalations, tool questions, plan reviews |
+| **Enter → confirm** | Presses the primary, right-most button — *Allow once* / *Submit / Next* / *Approve* |
+| **Esc → cancel** | Presses the cancel button — *Reject* / *Discard the group* / *Decline* |
+| Zero config | No settings page, no options — one generic rule, one effect |
+
+The panel anchors are harness-generic, so the hotkeys work on every
+interaction the harness renders — not just the edit-approval flow.
 
 | Panel | Enter → confirm | Esc → cancel |
 | --- | --- | --- |
@@ -16,39 +31,19 @@ renders.
 | Question / choice (`[data-question-key]`) | Submit / Next | Discard the group |
 | Plan review (`[data-plan-review-key]`) | Approve | Decline (or discuss) |
 
-The panel anchors are harness-generic, so the hotkeys work on every
-interaction the GUI shows — edit approvals, permission escalations, tool
-questions, plan reviews. This is the Claude Code habit: confirm with Enter,
-refuse with Esc.
+## 📸 Screenshots
 
-### Approval panel
+<table>
+  <tr>
+    <td align="center"><img src="assets/screenshots/approval-panel.png" width="440" alt="Approval panel — Enter: Allow once, Esc: Reject"><br><sub>Approval panel — Enter: Allow once, Esc: Reject</sub></td>
+    <td align="center"><img src="assets/screenshots/question-panel.png" width="440" alt="Question panel — Enter: Submit, Esc: Discard the group"><br><sub>Question panel — Enter: Submit, Esc: Discard the group</sub></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><img src="assets/screenshots/plan-review-panel.png" width="760" alt="Plan review panel — Enter: Approve, Esc: Decline"><br><sub>Plan review panel — Enter: Approve, Esc: Decline (or Discuss)</sub></td>
+  </tr>
+</table>
 
-Every approval — edits, permission escalations, anything routed through the
-ApprovalPanel. **Enter** presses *Allow once*, **Esc** presses *Reject*.
-
-<p align="center">
-  <img src="assets/screenshots/approval-panel.png" width="680" alt="Approval panel — Enter: Allow once, Esc: Reject"/>
-</p>
-
-### Question / choice panel
-
-Tool questions (`ask_user_question`). **Enter** presses *Submit / Next*,
-**Esc** presses *Discard the group*.
-
-<p align="center">
-  <img src="assets/screenshots/question-panel.png" width="680" alt="Question panel — Enter: Submit, Esc: Discard the group"/>
-</p>
-
-### Plan review panel
-
-**Enter** presses *Approve*, **Esc** presses *Decline* (or *Discuss* when
-the panel has no decline action).
-
-<p align="center">
-  <img src="assets/screenshots/plan-review-panel.png" width="680" alt="Plan review panel — Enter: Approve, Esc: Decline"/>
-</p>
-
-## Install
+## 📦 Install
 
 ```sh
 dsh plugin --profile web add dsh-approval-hotkeys
@@ -125,6 +120,26 @@ client-plugin fix. File an issue / PR against deepseek-harness if it bites.
 - The panel lookup prefers the current session's pending approval key and
   falls back to the first panel in DOM order.
 
+## Compatibility
+
+- Node.js `^22.19.0 || >=24.0.0`.
+- DeepSeek Harness web profile (`dsh --profile web`); peer `@deepseek-ai/*`
+  packages are resolved by the harness at runtime.
+
+> [!WARNING]
+> This project and DSH are both in developer preview. Pin exact versions in
+> reproducible environments and review the behavior notes above.
+
+## Not included
+
+- **Per-edit approval with a diff preview** — covered by the companion plugin
+  [dsh-edit-approval](https://github.com/SiriLee/dsh-edit-approval).
+- **Conversation / workspace rewind** — covered by the companion plugin
+  [dsh-rewind](https://github.com/SiriLee/dsh-rewind).
+
+This plugin is deliberately single-purpose: keyboard shortcuts for the
+interaction panels only. The other flows live in their own dedicated plugins.
+
 ## Development
 
 ```sh
@@ -134,6 +149,9 @@ npm test            # vitest (jsdom unit tests for the dispatch logic)
 npm run build       # esbuild: lib/index.js + lib/client.js + .d.ts
 node scripts/verify-host.mjs
 ```
+
+`prepare` runs the full build, so git installs and `npm pack` / `npm publish`
+always produce a complete `lib/` (with `.d.ts`) and the `LICENSE`.
 
 ## Release
 
