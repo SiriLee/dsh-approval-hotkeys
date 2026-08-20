@@ -57,8 +57,9 @@ the panel has no decline action).
 dsh plugin --profile web add dsh-approval-hotkeys
 ```
 
-Restart `dsh web` (or refresh the page — the client bundle reloads on refresh
-when the host side did not change). No configuration, no settings page.
+Restart `dsh web` — or, since this plugin is pure browser-side, just refresh the page when the host side did not change. No configuration, no settings page.
+
+For contributors: install from a local checkout or a pinned commit — `dsh plugin --profile web add /path/to/dsh-approval-hotkeys` or `dsh plugin --profile web add github:SiriLee/dsh-approval-hotkeys#<sha>`. A git install fails on first run until you add an `allowBuilds` key to the profile's `pnpm-workspace.yaml` (pnpm blocks git dependencies from running build scripts); after that it runs the plugin's `prepare` and installs it.
 
 ## How it works
 
