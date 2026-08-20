@@ -117,6 +117,10 @@ node scripts/verify-host.mjs
 **Trusted Publishing** 接管——推送 `v<semver>` 标签即自动带 provenance 发布。
 完整步骤见 [docs/release.md](docs/release.md)。
 
+## 安全
+
+纯浏览器端插件：host 半面为空壳，全部行为是一个文档级 keydown 监听器，点击面板上已有的按钮。无网络请求、无文件访问、不接触任何凭据。
+
 ## 许可
 
 [MIT](LICENSE)

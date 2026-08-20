@@ -141,6 +141,10 @@ The first publish is manual (`npm publish --access public`), then the
 GitHub Actions **Trusted Publishing** workflow takes over — push a `v<semver>`
 tag and CI publishes with provenance. Full steps: [docs/release.md](docs/release.md).
 
+## Security
+
+Pure browser-side plugin: the host half is an empty stub, and all behavior is a document-level keydown listener that clicks existing panel buttons. No network requests, no file access, no credentials.
+
 ## License
 
 [MIT](LICENSE)
