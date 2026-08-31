@@ -10,7 +10,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
-import { dispatch, findPanel } from '../src/client/hotkeys.ts'
+import { dispatch, findPanel, type UiSessionLike } from '../src/client/hotkeys.ts'
 
 /** A keydown event whose target is pinned to `target` (jsdom cannot set it in the init dict). */
 function keyEvent(key: string, target: EventTarget | null, init: KeyboardEventInit = {}): KeyboardEvent {
@@ -130,6 +130,19 @@ function sessionOf(options: { running?: boolean; pending?: readonly PendingLike[
 
 function cancelSpy(session: SessionFace): ReturnType<typeof vi.fn> {
   return (session as unknown as { cancel: ReturnType<typeof vi.fn> }).cancel
+}
+
+/** Alpha.1+ session face: `getSnapshot()` no longer carries `pending` (it moved to the ui-session pending map). */
+function alpha2Session(): SessionFace {
+  return {
+    getSnapshot: () => ({ running: false }),
+    cancel: vi.fn(async () => ({ ok: true })),
+  } as unknown as SessionFace
+}
+
+/** Alpha.1+ ui-session pending map fixture (per-session pending interaction). */
+function alpha2UiSession(entries: Record<string, { kind: string; key: string }>): UiSessionLike {
+  return { pendingInteractions: { getSnapshot: () => new Map(Object.entries(entries)) } }
 }
 
 beforeEach(() => {
@@ -350,5 +363,39 @@ describe('data-hotkey="none" opt-out buttons', () => {
     expect(action).toBe('confirm')
     expect(allowOnceSpy).toHaveBeenCalledOnce()
     expect(collapseSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('alpha.1+ ui-session pending channel (0.1.2-alpha.x)', () => {
+  it('resolves the pending approval key from the ui-session map when the session face no longer carries `pending`', () => {
+    const first = makeApprovalPanel('approval:other')
+    const second = makeApprovalPanel('approval:alpha')
+    const firstSpy = clickSpy(first.allowOnce)
+    const secondSpy = clickSpy(second.allowOnce)
+    const session = alpha2Session()
+    const uiSession = alpha2UiSession({ 'sess-1': { kind: 'approval', key: 'approval:alpha' } })
+    expect(findPanel(session, 'sess-1', uiSession)?.element).toBe(second.root)
+    const action = dispatch(keyEvent('Enter', document.body), session, 'sess-1', uiSession)
+    expect(action).toBe('confirm')
+    expect(firstSpy).not.toHaveBeenCalled()
+    expect(secondSpy).toHaveBeenCalledOnce()
+  })
+
+  it('degrades to the DOM fallback when the ui-session channel resolves no pending for the current session', () => {
+    const { reject } = makeApprovalPanel('approval:x')
+    const spy = clickSpy(reject)
+    const session = alpha2Session()
+    const uiSession = alpha2UiSession({})
+    const action = dispatch(keyEvent('Escape', document.body), session, 'sess-1', uiSession)
+    expect(action).toBe('cancel')
+    expect(spy).toHaveBeenCalledOnce()
+  })
+
+  it('never throws when the session face has no `pending` and no ui-session service is present', () => {
+    const { reject } = makeApprovalPanel('approval:x')
+    const spy = clickSpy(reject)
+    const action = dispatch(keyEvent('Escape', document.body), alpha2Session(), 'sess-1', undefined)
+    expect(action).toBe('cancel')
+    expect(spy).toHaveBeenCalledOnce()
   })
 })

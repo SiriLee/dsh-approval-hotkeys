@@ -68,6 +68,52 @@ const PANEL_KINDS: readonly PanelKind[] = [
   { selector: '[data-plan-review-key]', keyAttr: 'plan-review', confirm: 'last', cancel: 'second-last' },
 ]
 
+/** One pending interaction item surfaced by either host generation. */
+export interface PendingItem {
+  readonly kind: string
+  readonly key: string
+}
+
+/**
+ * Alpha.1+ structural face of the `uiSession` service's per-session pending
+ * map. Typed locally so the plugin never imports the session-UI package and
+ * survives harness version drift; the service is absent on rc.2 and must only
+ * be resolved lazily (never declared in `inject`).
+ */
+export interface UiSessionLike {
+  readonly pendingInteractions: {
+    getSnapshot(): ReadonlyMap<string, PendingItem>
+  }
+}
+
+/**
+ * Snapshot the pending interactions for the current session across both host
+ * generations:
+ *  - rc.2 channel: `session.getSnapshot().pending` (an array of `{ kind, key }`).
+ *  - alpha.1+ channel: the `uiSession` service's `pendingInteractions` map
+ *    (per-session) — the session-face snapshot no longer carries `pending`.
+ *
+ * Both missing degrades to the DOM fallback in `findPanel` (never a crash).
+ * The rc.2 read is guarded with `Array.isArray` so a missing `pending` field
+ * (alpha runtime) can never throw.
+ */
+export function pendingInteractions(
+  session: SessionFace | undefined,
+  sessionId: string | undefined,
+  uiSession: UiSessionLike | undefined,
+): readonly PendingItem[] {
+  if (session !== undefined) {
+    const rc = (session.getSnapshot() as { pending?: readonly PendingItem[] }).pending
+    if (Array.isArray(rc)) return rc
+  }
+  if (sessionId !== undefined && uiSession !== undefined) {
+    const map = uiSession.pendingInteractions.getSnapshot()
+    const entry = map.get(sessionId)
+    return entry === undefined ? [] : [{ kind: entry.kind, key: entry.key }]
+  }
+  return []
+}
+
 /** The outcome of one keydown dispatch. */
 export type HotkeyAction = 'confirm' | 'cancel' | 'none'
 
@@ -96,10 +142,16 @@ function isButtonTarget(target: EventTarget | null): boolean {
  * at), falling back to the first panel in DOM order — panels render inline
  * in the conversation stream, so the fallback is what the user sees.
  */
-export function findPanel(session: SessionFace | undefined): { element: HTMLElement; kind: PanelKind } | null {
-  if (session !== undefined) {
-    for (const item of session.getSnapshot().pending) {
-      const kind = PANEL_KINDS.find((candidate) => candidate.pendingKind === item.kind)
+export function findPanel(
+  session: SessionFace | undefined,
+  sessionId: string | undefined = undefined,
+  uiSession: UiSessionLike | undefined = undefined,
+): { element: HTMLElement; kind: PanelKind } | null {
+  // Dual-channel pending resolution (rc.2 session-face vs alpha.1+ ui-session
+  // map). A missing channel never throws: it degrades to the DOM fallback.
+  if (session !== undefined || sessionId !== undefined) {
+    for (const item of pendingInteractions(session, sessionId, uiSession)) {
+      const kind = PANEL_KINDS.find((candidate) => candidate.pendingKind === (item.kind as 'approval' | 'question'))
       if (kind === undefined) continue
       const panel = document.querySelector<HTMLElement>(`${kind.selector}[data-${kind.keyAttr}-key="${item.key}"]`)
       if (panel !== null) return { element: panel, kind }
@@ -146,9 +198,14 @@ function locateButton(panel: HTMLElement, locator: ButtonLocator): HTMLButtonEle
  * undefined when no session is selected); returns the action taken so the
  * caller can `preventDefault()`.
  */
-export function dispatch(event: KeyboardEvent, session: SessionFace | undefined): HotkeyAction {
+export function dispatch(
+  event: KeyboardEvent,
+  session: SessionFace | undefined,
+  sessionId: string | undefined = undefined,
+  uiSession: UiSessionLike | undefined = undefined,
+): HotkeyAction {
   if (isChord(event) || isEditable(event.target)) return 'none'
-  const panel = findPanel(session)
+  const panel = findPanel(session, sessionId, uiSession)
   if (event.key === 'Enter') {
     // Focus inside a button: the browser (or the panel itself, e.g. the
     // question composer's options) already handles Enter — acting again
