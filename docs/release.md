@@ -42,3 +42,39 @@ git push origin main --tags
 `publish.yml` 触发：Node 24 + npm≥11.5.1 校验 → typecheck/test/build/verify →
 tag/版本一致性 → 幂等守卫 → `npm publish --provenance --access public` →
 GitHub Release（自动生成 notes）。
+
+## DSH 版本对齐（peer 范围）
+
+DSH 仍处于 rc 阶段。npm 的 prerelease 匹配规则是：带 prerelease 的版本，只有在
+**同一个 `||` 分组**里存在一个「同名 major.minor.patch 且自身带 prerelease」的
+比较器时才可能被匹配。因此**每个出过预发布的 tuple 必须占一个 `||` 项**——
+`>=0.1.0-rc.6 <0.2.0` 这类写法会静默漏掉 0.1.0 之外所有 tuple 的预发布
+（包括实测通过的 `0.1.5-rc.1`）。
+
+当前声明 = 从 `0.1.0-rc.6` 起的**整条 0.1 线（含预发布）**：
+
+```
+^0.1.0-rc.6 || ^0.1.1-0 || ^0.1.2-0 || ^0.1.3-0 || ^0.1.5-0
+```
+
+- `-0` 是某个 tuple 最低的预发布，`^0.1.N-0` 即「0.1.N 整个 patch，含预发布」，
+  所以同 tuple 内的 rc.2 → rc.3 滚动（以及 alpha 系列）**不需要再改**。
+- 首个 tuple 必须用 `-rc.6` 作下限（排除更早的 `rc.2`/`rc.3`），不能用 `-0`。
+- `^0.1.0-rc.6` 同时覆盖 0.1.x 的稳定版；`0.2.0` 与 `0.2.0-rc.*` 都不匹配。
+- 出现**新 tuple**（`0.1.6-rc.1`、`0.2.0-rc.1` …）时必须追加 `^<tuple>-0` 项——
+  `node scripts/check-dsh-version.mjs`（exit 1）就是用来提醒这一步的。
+
+peer 包名用 `@deepseek-ai/dsh-client-modules`（客户端模块系统，npm 上自
+`0.0.1-rc.1` 起全线在列），这是唯一能贯穿整条 0.1 线的客户端运行时锚点。
+旧的 `@deepseek-ai/dsh-client-runtime` **只发布到 `0.1.1-rc.2`**，之后不再随 DSH
+发版，对它声明 `^0.1.2-rc.1` / `^0.1.5-rc.1` 永远匹配不到任何已发布版本；该名字
+仅作为 `dsh.client.inject` 的旧版本排序 token 保留（0.1.2+ 的
+`dsh-client-modules` 会静默忽略未知 inject 名）。
+
+`dsh.engines.dsh` 声明运行时下限（`>=0.1.0-rc.6`），供插件管理器做下限守卫。
+注意：在 DSH `0.1.5-rc.1` 对应的 DSH 源码与 dsh-market 中均**未发现**读取该字段
+的实现（dsh-market 只读 `peerDependencies` / `peerDependenciesMeta`），因此它是
+声明性元数据，不要当作唯一的兼容信号。
+
+DSH 转正式版后 prerelease 规则不再约束，上面整串可收敛为单一稳定范围
+（如 `^0.1.x`），本节即可删除。

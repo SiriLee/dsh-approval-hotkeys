@@ -6,10 +6,12 @@
  * npm "latest" of @deepseek-ai/dsh is the single authoritative release signal.
  *
  * npm's prerelease matching rule only accepts a prerelease candidate when the
- * range contains a comparator on the SAME [major, minor, patch] tuple, so a
- * peer range like "^0.1.0-rc.6 || ^0.1.1-rc.2" silently stops matching the day
- * DSH bumps to a new tuple (0.1.2-rc.x, 0.2.x, …) — while same-tuple rc rolls
- * (0.1.1-rc.2 → rc.3) keep working and need no action.
+ * range contains a comparator on the SAME [major, minor, patch] tuple, so the
+ * peer range carries one `^<tuple>-0` term per supported DSH patch tuple:
+ *   "^0.1.0-rc.6 || ^0.1.1-0 || ^0.1.2-0 || ^0.1.3-0 || ^0.1.5-0"
+ * `-0` is a tuple's lowest prerelease, so same-tuple rolls (rc.2 → rc.3, or an
+ * alpha series) keep working and need no action — while a NEW tuple silently
+ * stops matching until its own `^<tuple>-0` term is appended.
  *
  * This script compares the current DSH tuple against the tuples covered by the
  * first @deepseek-ai/dsh-* peer range in package.json and exits:
@@ -75,8 +77,11 @@ if (covered.has(tuple)) {
 }
 
 console.log('ACTION NEEDED: DSH moved to a new version tuple.')
-console.log('  1. Append "|| ^<tuple>-rc.<n>" to every @deepseek-ai/dsh-* peer range in package.json')
-console.log('     (or a verified stable range once DSH ships a final release).')
-console.log('  2. Bump the @deepseek-ai/dsh-* devDependencies to ^' + latest + '.')
+console.log(`  1. Append "|| ^${tuple}-0" to the @deepseek-ai/dsh-* peer range in package.json`)
+console.log('     ("-0" is that tuple\'s lowest prerelease, so later rc/alpha rolls of the same')
+console.log('     tuple need no edit; once DSH ships a final release the union can converge to a')
+console.log('     single stable range).')
+console.log('  2. Re-verify the compile-time types against the new DSH: on 0.1.5+ ClientContext is')
+console.log('     the cordis Context and SessionFace lives in @deepseek-ai/dsh-api-session-controller/client.')
 console.log('  3. npm install, rerun typecheck / tests / scripts/verify-host.mjs, then release.')
 process.exit(1)

@@ -52,6 +52,8 @@ dsh plugin --profile web add dsh-approval-hotkeys
 
 重启 `dsh web`——或直接刷新页面（本插件纯浏览器端，host 未变时刷新即加载新 client bundle）。无需任何配置。
 
+兼容范围：从 `0.1.0-rc.6` 起的整条 `0.1` 线（含预发布）——以可选 peer 形式声明在 `@deepseek-ai/dsh-client-modules` 上，范围为 `^0.1.0-rc.6 || ^0.1.1-0 || ^0.1.2-0 || ^0.1.3-0 || ^0.1.5-0`（为什么必须用 `||` 并集见 `docs/release.md`）。
+
 贡献者：本地 checkout 或固定 commit 安装——`dsh plugin --profile web add /path/to/dsh-approval-hotkeys` 或 `dsh plugin --profile web add github:SiriLee/dsh-approval-hotkeys#<sha>`。git 安装首次会失败：pnpm 默认阻止 git 依赖执行构建脚本，按提示在 profile 的 `pnpm-workspace.yaml` 添加 `allowBuilds` 键后重试，之后会运行插件 `prepare` 并完成安装。
 
 ## 原理
