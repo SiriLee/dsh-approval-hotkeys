@@ -71,6 +71,12 @@ peer 包名用 `@deepseek-ai/dsh-client-modules`（客户端模块系统，npm �
 仅作为 `dsh.client.inject` 的旧版本排序 token 保留（0.1.2+ 的
 `dsh-client-modules` 会静默忽略未知 inject 名）。
 
+`devDependencies` 里的 `@deepseek-ai/dsh-client-runtime` **必须保持钉在
+`^0.1.1-rc.2`**：它是 `src/client/index.ts` 与 `tests/hotkeys.test.ts` 的编译期
+类型来源，该包已停发，bump 或替换会直接打断 typecheck / 测试。在类型 import
+迁移到现代路径（cordis 的 `Context`、`@deepseek-ai/dsh-api-session-controller/client`
+的 `SessionFace`）之前不要动它——它与 peer 声明无关，不要"顺手对齐"。
+
 `dsh.engines.dsh` 声明运行时下限（`>=0.1.0-rc.6`），供插件管理器做下限守卫。
 注意：在 DSH `0.1.5-rc.1` 对应的 DSH 源码与 dsh-market 中均**未发现**读取该字段
 的实现（dsh-market 只读 `peerDependencies` / `peerDependenciesMeta`），因此它是
