@@ -117,5 +117,16 @@ client 半面的编译期类型来自真实 harness 包：devDeps 按**精确版
 0.1.7-rc.1 适配版发到 `next`，`latest` 暂留上一版：npm 上 `@deepseek-ai/dsh` 的
 `latest` 仍是 `0.1.5-rc.3`，若把只支持 0.1.7 的构建推到 `latest`，0.1.5 用户更新后
 会被启动 peer 检查跳过。`publish.yml` 新增 `dist_tag` 手动输入用于显式指定（预发布
-版本默认按其标识符、稳定版本默认 `latest`；本次显式传 `next`），并且只有发到
-`latest` 时才把 GitHub Release 标为 `--latest`。
+版本默认按其标识符、稳定版本默认 `latest`），并且只有发到 `latest` 时才把 GitHub
+Release 标为 `--latest`。
+
+**v0.2.0 的发布动作：不要推 `v0.2.0` tag。** tag 触发的流程对稳定版本会推导出
+`latest`，与本版策略相反。改用 **workflow_dispatch 手动触发**，`dist_tag` 填 `next`。
+
+日后要把它提升到 `latest`（例如 DSH 0.1.7 转正式版之后）：**重新跑 workflow 没用**——
+幂等守卫按「该版本是否已在 registry 上」判断，而已发布的版本无论挂在哪个 tag 下都会命中
+并跳过发布。直接调整 tag 即可：
+
+```sh
+npm dist-tag add dsh-approval-hotkeys@0.2.0 latest
+```
