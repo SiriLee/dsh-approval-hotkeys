@@ -52,7 +52,7 @@ dsh plugin --profile web add dsh-approval-hotkeys
 
 重启 `dsh web`——或直接刷新页面（本插件纯浏览器端，host 未变时刷新即加载新 client bundle）。无需任何配置。
 
-兼容范围：从 `0.1.0-rc.6` 起的整条 `0.1` 线（含预发布）——以可选 peer 形式声明在 `@deepseek-ai/dsh-client-modules` 上，范围为 `^0.1.0-rc.6 || ^0.1.1-0 || ^0.1.2-0 || ^0.1.3-0 || ^0.1.5-0`（为什么必须用 `||` 并集见 `docs/release.md`）。
+兼容范围：**DSH `0.1.7-rc.1` 及 `0.1` 线上更晚的版本**——以可选 peer 形式声明在 client 半面实际读取的两个服务上（`@deepseek-ai/dsh-api-session-controller`、`@deepseek-ai/dsh-client-ui-session`），并声明 `dsh.engines.dsh`。**一次发布只对一条 DSH 线**：harness 在同一条线内删过 client API（`SessionListState.current`、`uiSession.pendingInteractions`），旧线用户由冻结点在旧线的版本继续服务。另注意：自 `0.1.7-rc.1` 起，harness 会在启动时用运行版本校验 profile bundle 自身的 `@deepseek-ai/dsh-*` peer，任一项不满足就**跳过整个 bundle**——过期的 peer 范围现在会让插件直接不加载，而不是打一条警告。范围策略见 [docs/release.md](docs/release.md)。
 
 贡献者：本地 checkout 或固定 commit 安装——`dsh plugin --profile web add /path/to/dsh-approval-hotkeys` 或 `dsh plugin --profile web add github:SiriLee/dsh-approval-hotkeys#<sha>`。git 安装首次会失败：pnpm 默认阻止 git 依赖执行构建脚本，按提示在 profile 的 `pnpm-workspace.yaml` 添加 `allowBuilds` 键后重试，之后会运行插件 `prepare` 并完成安装。
 
@@ -72,7 +72,11 @@ dsh plugin --profile web add dsh-approval-hotkeys
 - **焦点在按钮上时 Enter 不拦截**：交给浏览器原生激活聚焦按钮、以及面板自身
   （选择弹窗的选项自带 Enter 提交）——再处理会双重触发。
 - **组合键与连发不拦截**：`Ctrl/Meta/Alt+键` 与按住连发交给系统。
+- **输入法组字中不拦截**：IME 确认候选词的 `Enter`（`isComposing`，或历史的 `keyCode` 229）
+  是在选词，不是在应答。
 - **无面板时 Esc 不拦截**：插件只作用于交互面板，绝不停止/暂停 agent。
+- **运行时未确认的面板不拦截**：只要运行时能报出「此刻有哪个请求在等待应答」，插件就只应答
+  那一个请求——DOM 里残留的已结束或不属于本会话的面板，不会被按位置猜着点。
 
 ### 按钮解析契约（`data-hotkey="none"`）
 
@@ -106,16 +110,26 @@ client 插件能解决的。真遇到时请向 deepseek-harness 提 issue / PR�
   一个 `document` `keydown` 监听器，卸载/HMR 时解绑。
 - 依赖稳定的 ApprovalPanel DOM 契约：拒绝在前、允许一次在后、回答后按钮 disabled——
   既不可能重复应答，按钮顺序也是与 harness 唯一的耦合点。
-- 面板查找优先匹配当前会话的待审批 key，找不到再取 DOM 中第一个面板。
+- 面板查找先问运行时：`uiSession.sessionStatus` 给出「主视图保留的会话」（`sessions.list`
+  的 `retainedBy.mainView`，即取代 `SessionListState.current` 的信号）此刻等待应答的请求，
+  再按该请求 key 定位面板。运行时读得到、但报「没有待应答请求」时，插件就完全不插手；只有
+  运行时**读不到**（没有 `uiSession`、快照字段被改名——即更旧或更新的宿主）才退化为
+  「DOM 中第一个**可见**面板」。
+- 只有真正在屏幕上的面板才可应答：落在 `inert` / `hidden` 子树内、或被 `visibility: hidden`
+  隐藏的面板绝不点击（`inert` 与 `visibility` 都不会让 `offsetParent` 变空，所以这些情况需要
+  显式判定，常规可见性检查抓不到）。
+- `src/client/contract.ts` 在编译期钉住所读取的 harness 形状。没有它，`skipLibCheck` 会把
+  被移动/改名的类型静默变成 `any`，typecheck 依旧全绿而每处读取都已失去检查。
 
 ## 开发
 
 ```sh
 npm install
-npm run typecheck   # tsc --noEmit（host + client）
-npm test            # vitest（jsdom 单测，覆盖 dispatch 全部分支）
+npm run typecheck   # tsc --noEmit（host + client + 契约钉）
+npm test            # vitest（dispatch 与目标解析单测）
 npm run build       # esbuild：lib/index.js + lib/client.js + .d.ts
-node scripts/verify-host.mjs
+node scripts/verify-host.mjs   # 对构建产物做端到端校验
+npm run check       # 以上全部 + npm pack --dry-run
 ```
 
 ## 发布

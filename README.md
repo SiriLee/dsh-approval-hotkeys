@@ -59,7 +59,7 @@ dsh plugin --profile web add dsh-approval-hotkeys
 
 Restart `dsh web` — or, since this plugin is pure browser-side, just refresh the page when the host side did not change. No configuration, no settings page.
 
-Supported harness versions: the whole `0.1` line from `0.1.0-rc.6` on, prereleases included — declared as an optional peer on `@deepseek-ai/dsh-client-modules` with the range `^0.1.0-rc.6 || ^0.1.1-0 || ^0.1.2-0 || ^0.1.3-0 || ^0.1.5-0` (see `docs/release.md` for why the `||` union is required).
+Supported harness versions: **DSH `0.1.7-rc.1` and later on the `0.1` line**, declared as optional peers on the two services the client half reads (`@deepseek-ai/dsh-api-session-controller`, `@deepseek-ai/dsh-client-ui-session`) plus `dsh.engines.dsh`. One release targets one DSH line: the harness has removed client APIs inside a line before (`SessionListState.current`, `uiSession.pendingInteractions`), and older lines are served by the release frozen on them. Note that since `0.1.7-rc.1` the harness checks a profile bundle's own `@deepseek-ai/dsh-*` peers against the running version at startup and **skips the whole bundle** when one does not satisfy it — a stale peer range now costs the plugin its load instead of printing a warning. See [docs/release.md](docs/release.md).
 
 For contributors: install from a local checkout or a pinned commit — `dsh plugin --profile web add /path/to/dsh-approval-hotkeys` or `dsh plugin --profile web add github:SiriLee/dsh-approval-hotkeys#<sha>`. A git install fails on first run until you add an `allowBuilds` key to the profile's `pnpm-workspace.yaml` (pnpm blocks git dependencies from running build scripts); after that it runs the plugin's `prepare` and installs it.
 
@@ -86,8 +86,14 @@ For contributors: install from a local checkout or a pinned commit — `dsh plug
   options submit on Enter) — acting again would double-fire.
 - **Never on chords or repeats**: `Ctrl/Meta/Alt+key` combinations and
   held-key repeats are left alone.
+- **Never mid-composition**: an IME-confirming `Enter` (`isComposing`, or the
+  legacy `keyCode` 229) is a candidate pick, not an answer.
 - **Esc with no panel**: left alone — the plugin never stops or pauses the
   agent; panels are the only surface it acts on.
+- **Never on a panel the runtime does not vouch for**: when the runtime reports
+  what is awaiting an answer here, that request is the only thing the hotkeys
+  answer — a settled or foreign panel left in the DOM is not clicked through a
+  positional guess.
 
 ### Button resolution contract (`data-hotkey="none"`)
 
@@ -128,17 +134,31 @@ client-plugin fix. File an issue / PR against deepseek-harness if it bites.
 - Relies on the stable ApprovalPanel DOM contract: reject renders first,
   allow-once last, both `disabled` after an answer — so a double-answer is
   impossible and the button-order dependency is the only harness coupling.
-- The panel lookup prefers the current session's pending approval key and
-  falls back to the first panel in DOM order.
+- The panel lookup asks the runtime first: `uiSession.sessionStatus` names the
+  request awaiting an answer for the session the main view retains
+  (`sessions.list` → `retainedBy.mainView`, the signal that replaced
+  `SessionListState.current`), and the panel is then located by that request
+  key. A readable runtime that reports nothing awaiting an answer means the
+  hotkeys stay out of the way; only an **unreadable** runtime (no `uiSession`,
+  a renamed snapshot field — i.e. an older or newer host) falls back to the
+  first *visible* panel in DOM order.
+- Panels are only answerable when actually on screen: a panel inside an
+  `inert` or `hidden` subtree, or hidden through `visibility: hidden`, is never
+  clicked. (`inert` and `visibility` both leave `offsetParent` set, so those
+  cases need explicit checks rather than the usual visibility test.)
+- `src/client/contract.ts` pins the harness shapes this reads at compile time.
+  Without it, `skipLibCheck` would silently turn a moved or renamed type into
+  `any` and the typecheck would keep passing while every read went unchecked.
 
 ## Development
 
 ```sh
 npm install
-npm run typecheck   # tsc --noEmit (host + client)
-npm test            # vitest (jsdom unit tests for the dispatch logic)
+npm run typecheck   # tsc --noEmit (host + client + the contract pins)
+npm test            # vitest (dispatch + target-resolution unit tests)
 npm run build       # esbuild: lib/index.js + lib/client.js + .d.ts
-node scripts/verify-host.mjs
+node scripts/verify-host.mjs   # exercises the built artifacts
+npm run check       # all of the above + npm pack --dry-run
 ```
 
 ## Release
