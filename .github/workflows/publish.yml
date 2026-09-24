@@ -22,6 +22,17 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      dist_tag:
+        description: >-
+          npm dist-tag to publish under (empty = derive from the version:
+          a prerelease uses its identifier, e.g. rc; a stable version uses
+          latest). Use "next" for a build that only supports a DSH line whose
+          own dist-tag is next, so users on the promoted line are not moved
+          onto it by an update.
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: write # create the GitHub Release
@@ -95,21 +106,48 @@ jobs:
 
       # Trusted publishing: npm reads the CI OIDC token automatically
       # (ACTIONS_ID_TOKEN_REQUEST_URL). No NODE_AUTH_TOKEN secret needed.
+      #
+      # dist-tag: an explicit dispatch input wins; otherwise it is derived from
+      # the version (a prerelease publishes under its identifier, e.g. `rc`, a
+      # stable version under `latest`). Publishing a build that targets a DSH
+      # line still sitting on npm's `next` tag must use `next` as well: npm
+      # `latest` users are otherwise moved by an update onto a plugin build
+      # whose peer range the startup admission gate refuses, which skips the
+      # whole bundle.
+      - name: Resolve the npm dist-tag
+        id: tag
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG='${{ inputs.dist_tag }}'
+          if [ -z "$TAG" ]; then
+            case "$VERSION" in
+              *-*) TAG="${VERSION#*-}"; TAG="${TAG%%.*}" ;;
+              *) TAG=latest ;;
+            esac
+          fi
+          echo "dist_tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "publishing ${VERSION} under dist-tag ${TAG}"
+
       - name: Publish to npm via OIDC
         if: steps.check.outputs.already_published == 'false'
-        run: npm publish --provenance --access public
+        run: npm publish --provenance --access public --tag "${{ steps.tag.outputs.dist_tag }}"
 
       - name: Create GitHub Release (if missing)
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
+          DIST_TAG: ${{ steps.tag.outputs.dist_tag }}
         run: |
           if gh release view "${GITHUB_REF_NAME}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             echo "Release ${GITHUB_REF_NAME} already exists — leaving it alone."
-          else
-            gh release create "${GITHUB_REF_NAME}" \
-              --repo "${{ github.repository }}" \
-              --title "${GITHUB_REF_NAME}" \
-              --generate-notes \
-              --latest
+            exit 0
           fi
+          # Only a `latest` publish is the repository's latest release; a
+          # `next`/prerelease publish must not claim that marker.
+          LATEST_FLAG=()
+          if [ "$DIST_TAG" = "latest" ]; then LATEST_FLAG=(--latest); fi
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${{ github.repository }}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            "${LATEST_FLAG[@]}"
