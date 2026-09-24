@@ -39,11 +39,14 @@ jobs:
       - name: Build (full, with .d.ts) and verify built artifact
         run: npm run build && node scripts/verify-host.mjs
 
-      - name: Pack sanity (tarball must contain lib/ and LICENSE)
+      - name: Pack sanity (tarball must contain lib/, locale/ and LICENSE)
         run: |
           npm pack --dry-run 2>&1 | tee /tmp/pack.txt
           grep -q 'lib/index.js' /tmp/pack.txt
           grep -q 'lib/types/index.d.ts' /tmp/pack.txt
           grep -q 'lib/client.js' /tmp/pack.txt
           grep -q 'lib/types/client/index.d.ts' /tmp/pack.txt
+          # The plugin-manager card reads this dictionary; without it in the
+          # tarball the card silently loses its title and description.
+          grep -q 'locale/en.json' /tmp/pack.txt
           grep -q 'LICENSE' /tmp/pack.txt

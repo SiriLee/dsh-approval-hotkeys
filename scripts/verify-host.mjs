@@ -21,7 +21,7 @@
  * (which boots the built host half on a real cordis context): the artifact is
  * exercised, so a build that compiles but ships the wrong wiring fails here.
  */
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { JSDOM } from 'jsdom'
@@ -42,6 +42,28 @@ check(
   'declared dsh runtime floor',
   typeof pkg.dsh?.engines?.dsh === 'string' && pkg.dsh.engines.dsh !== '',
   String(pkg.dsh?.engines?.dsh),
+)
+
+// The card's display text comes from the package's own dictionaries: the
+// manager resolves `<specifier>/locale/en.json` as the anchor, then every
+// sibling through the exports map. Without the anchor, the export, or the file
+// glob the card silently falls back to the raw package name and description,
+// so the three travel as one check.
+const localeDir = join(ROOT, 'locale')
+const dictionaries = (await readdir(localeDir)).filter((name) => name.endsWith('.json'))
+const localized = []
+for (const name of dictionaries) {
+  const meta = JSON.parse(await readFile(join(localeDir, name), 'utf8')).meta
+  const text = (value) => typeof value === 'string' && value.trim() !== ''
+  if (text(meta?.title) && text(meta?.description)) localized.push(name.replace(/\.json$/u, ''))
+}
+check(
+  'locale card metadata resolves (anchor + export + text)',
+  dictionaries.includes('en.json')
+    && typeof pkg.exports?.['./locale/*.json'] === 'string'
+    && (pkg.files ?? []).includes('locale/*.json')
+    && localized.length === dictionaries.length,
+  `languages: ${localized.join(', ') || 'none'}`,
 )
 
 // 2. host half: parseable ESM exporting `apply`
