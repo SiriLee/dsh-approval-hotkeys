@@ -11,22 +11,34 @@
  *                   `window.__ModuleLoader__.load({ id, factory })`, the
  *                   closure-factory format every `dsh.client` package's
  *                   `./client` export must use. The client half is fully
- *                   self-contained (plain DOM, no React), so nothing is
- *                   external and the injected `require` is never called.
+ *                   self-contained (plain DOM, no React, no harness module),
+ *                   so nothing is external and the injected `require` is never
+ *                   called.
  *
- * Type checking is a separate step (`npm run typecheck`, tsc --noEmit); this
- * script only transpiles (esbuild) and runs smoke checks: both outputs must
- * parse, the host half must export the plugin shape, and the client handoff
- * must carry the package id.
+ * Type checking is a separate step (`npm run typecheck`, tsc --noEmit, which
+ * also compiles the contract pins in src/client/contract.ts); this script only
+ * transpiles (esbuild) and runs smoke checks on the artifacts:
+ *   - the `dsh.client` declaration is loadable: platform 'web', a `./client`
+ *     export, and every `inject` edge naming a package that actually resolves
+ *     (the 0.1.1-rc.2-only `@deepseek-ai/dsh-client-runtime` used to sit here
+ *     long after it stopped being published);
+ *   - the client handoff carries the exact package id — the module-table
+ *     registration key must equal the boot graph row id, which equals the
+ *     package name;
+ *   - the client bundle is self-contained, so a future import of a harness
+ *     module cannot silently turn into an unresolved `require`;
+ *   - both declaration files exist.
  */
 import { build } from 'esbuild'
 import { execSync } from 'node:child_process'
+import { createRequire } from 'node:module'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'))
+const require = createRequire(import.meta.url)
 
 // Clean first: stale declarations from earlier builds must not survive into
 // the next tarball.
@@ -57,6 +69,8 @@ await build({
   platform: 'browser',
   target: 'es2020',
   bundle: true,
+  // Nothing is external: the client half imports no harness module and no
+  // React, so the module table never has to resolve anything for us.
   external: [],
   sourcemap: false,
 })
@@ -82,11 +96,36 @@ await writeFile(join(ROOT, 'lib', 'client.js'), bundle)
 const host = await readFile(join(ROOT, 'lib', 'index.js'), 'utf8')
 const exportBlock = host.slice(host.lastIndexOf('export {'))
 if (!exportBlock.includes('apply')) throw new Error('host bundle missing export apply')
+
+// The `dsh.client` declaration must describe a loadable browser package. The
+// client module system throws during its activation scan when a package
+// declares `dsh.client` without a `./client` export, and a broken declaration
+// fails the whole web boot loudly, so the shape is checked here too.
+if (pkg.dsh?.client?.platform !== 'web') throw new Error('dsh.client.platform must be "web"')
+if (typeof pkg.exports?.['./client']?.default !== 'string') {
+  throw new Error('package exports no "./client" bundle (dsh.client requires one)')
+}
+// `inject` edges are informational to the runtime, but a name that resolves to
+// nothing is a stale declaration waiting to mislead: check every one.
+for (const name of pkg.dsh.client.inject ?? []) {
+  try {
+    require.resolve(`${name}/package.json`)
+  } catch {
+    throw new Error(`dsh.client.inject names "${name}", which does not resolve from this package`)
+  }
+}
+
 for (const needle of ['window.__ModuleLoader__.load', `id: ${JSON.stringify(pkg.name)}`]) {
   if (!bundle.includes(needle)) throw new Error(`client bundle missing ${needle}`)
 }
+// Self-containment: the client half must not reference a harness package (a
+// require the module table would have to answer) nor call the injected
+// `require` at all.
+if (bundle.includes('@deepseek-ai/')) throw new Error('client bundle references a harness package')
+if (/\brequire\s*\(/.test(bundle)) throw new Error('client bundle calls require(); it must stay self-contained')
+
 // Declarations must exist (published tarball carries them).
-for (const dts of ['lib/types/index.d.ts', 'lib/types/client/index.d.ts']) {
+for (const dts of ['lib/types/index.d.ts', 'lib/types/client/index.d.ts', 'lib/types/client/contract.d.ts']) {
   await readFile(join(ROOT, dts), 'utf8')
 }
 console.log('build ok: lib/index.js (host), lib/client.js (client), lib/types/ (declarations)')

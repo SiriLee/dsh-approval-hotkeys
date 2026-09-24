@@ -3,22 +3,28 @@
  * check-dsh-version.mjs — watch the DSH release cadence without watching the repo.
  *
  * DSH publishes every @deepseek-ai/dsh-* package at the same version, so the
- * npm "latest" of @deepseek-ai/dsh is the single authoritative release signal.
+ * registry's dist-tags are the authoritative release signal. DSH keeps
+ * pre-releases on their own tags: `latest` trails at the last promoted release
+ * while `next`/`alpha` carry the line under development. Probing `latest` alone
+ * therefore misses exactly the releases this plugin has to adapt to — 0.1.7-rc.1
+ * shipped under `next` while `latest` still said 0.1.5-rc.3, which is why the
+ * 0.1.7 tuple went unnoticed. This script compares the HIGHEST tuple published
+ * under ANY dist-tag against the tuples the peer range covers.
  *
- * npm's prerelease matching rule only accepts a prerelease candidate when the
- * range contains a comparator on the SAME [major, minor, patch] tuple, so the
- * peer range carries one `^<tuple>-0` term per supported DSH patch tuple:
- *   "^0.1.0-rc.6 || ^0.1.1-0 || ^0.1.2-0 || ^0.1.3-0 || ^0.1.5-0"
+ * Peer-range rule: npm's prerelease matching only accepts a prerelease
+ * candidate when the range carries a comparator on the SAME [major, minor,
+ * patch] tuple, so the range carries one `^<tuple>-0` term per supported tuple:
+ *   "^0.1.7-rc.1"
  * `-0` is a tuple's lowest prerelease, so same-tuple rolls (rc.2 → rc.3, or an
- * alpha series) keep working and need no action — while a NEW tuple silently
- * stops matching until its own `^<tuple>-0` term is appended.
+ * alpha series) need no edit — while a NEW tuple stops matching until its own
+ * `^<tuple>-0` term is appended. Note that a *floor* term (`^0.1.7-rc.1`) also
+ * refuses anything below it, which is deliberate: this plugin targets one DSH
+ * line, and older lines are served by the release frozen on them.
  *
- * This script compares the current DSH tuple against the tuples covered by the
- * first @deepseek-ai/dsh-* peer range in package.json and exits:
- *   0 — current DSH tuple is covered, no action needed.
- *   1 — DSH moved to a new tuple; append an OR term and re-verify.
- *   2 — registry unreachable or unparseable (never blocks a release silently
- *       as "OK"; the caller decides whether to treat it as a warning).
+ * Exit:
+ *   0 — every published tuple is covered (or merely behind the covered floor).
+ *   1 — a tuple ahead of the covered range is published; append its term.
+ *   2 — registry unreachable or unparseable (never reported as "OK").
  */
 
 import { readFileSync } from 'node:fs'
@@ -27,61 +33,77 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const MANIFEST = JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf8'))
+const PROBE_URL = 'https://registry.npmjs.org/@deepseek-ai/dsh'
 
-function dshPeers(manifest) {
-  return Object.keys(manifest.peerDependencies ?? {})
-    .filter((name) => name.startsWith('@deepseek-ai/dsh-'))
+const tupleOf = (version) => {
+  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version.trim())
+  return match === null ? null : `${match[1]}.${match[2]}.${match[3]}`
 }
-
-function coveredTuples(range) {
-  const tuples = new Set()
-  for (const match of range.matchAll(/(\d+)\.(\d+)\.(\d+)/g)) {
-    tuples.add(`${match[1]}.${match[2]}.${match[3]}`)
+/** Numeric triple comparison (tuples carry no prerelease part). */
+const compareTuples = (left, right) => {
+  const a = left.split('.').map(Number)
+  const b = right.split('.').map(Number)
+  for (let index = 0; index < 3; index += 1) {
+    if (a[index] !== b[index]) return a[index] - b[index]
   }
-  return tuples
+  return 0
 }
 
-const peers = dshPeers(MANIFEST)
+const peers = Object.keys(MANIFEST.peerDependencies ?? {}).filter((name) => name.startsWith('@deepseek-ai/dsh'))
 if (peers.length === 0) {
   console.log('check-dsh-version: no @deepseek-ai/dsh-* peer declared — nothing to track')
   process.exit(0)
 }
 
 const probe = MANIFEST.peerDependencies[peers[0]]
-const covered = coveredTuples(probe)
+const covered = new Set()
+for (const match of probe.matchAll(/(\d+)\.(\d+)\.(\d+)/g)) covered.add(`${match[1]}.${match[2]}.${match[3]}`)
+const floor = [...covered].sort(compareTuples).at(-1)
 
-let latest
+let tags
 try {
-  const response = await fetch('https://registry.npmjs.org/@deepseek-ai/dsh/latest')
+  const response = await fetch(PROBE_URL)
   if (!response.ok) throw new Error(`registry responded ${response.status}`)
-  latest = (await response.json()).version
+  // The registry spells the field `dist-tags`.
+  tags = (await response.json())['dist-tags']
 } catch (error) {
   console.error(`check-dsh-version: cannot reach npm registry (${error.message})`)
   process.exit(2)
 }
-
-const tuple = /^(\d+\.\d+\.\d+)/.exec(latest)?.[1] ?? null
-if (tuple === null) {
-  console.error(`check-dsh-version: unparseable latest DSH version "${latest}"`)
+if (typeof tags !== 'object' || tags === null || Object.keys(tags).length === 0) {
+  console.error(`check-dsh-version: no dist-tags in the registry document for ${PROBE_URL}`)
   process.exit(2)
 }
 
-const coveredList = [...covered].sort().join(', ')
-console.log(`DSH latest:      ${latest}`)
-console.log(`probe peer:      ${peers[0]} = "${probe}"`)
-console.log(`covered tuples:  ${coveredList}`)
+const published = new Map()
+for (const [tag, version] of Object.entries(tags)) {
+  const tuple = typeof version === 'string' ? tupleOf(version) : null
+  if (tuple === null) {
+    console.error(`check-dsh-version: unparseable version "${String(version)}" on tag "${tag}"`)
+    process.exit(2)
+  }
+  published.set(tag, { version, tuple })
+}
 
-if (covered.has(tuple)) {
-  console.log('OK: current DSH tuple is covered — no peer change needed (same-tuple rc rolls are unaffected).')
+console.log(`probe peer:   ${peers[0]} = "${probe}"`)
+console.log(`covered:      ${[...covered].sort(compareTuples).join(', ')} (floor ${floor})`)
+for (const [tag, { version, tuple }] of [...published].sort((a, b) => compareTuples(a[1].tuple, b[1].tuple))) {
+  console.log(`dist-tag:     ${tag.padEnd(8)} ${version}${tuple > floor ? '  <-- ahead of the covered range' : ''}`)
+}
+
+const ahead = [...published].filter(([, { tuple }]) => compareTuples(tuple, floor) > 0)
+if (ahead.length === 0) {
+  console.log('OK: no published dist-tag is ahead of the covered DSH tuples.')
   process.exit(0)
 }
 
-console.log('ACTION NEEDED: DSH moved to a new version tuple.')
-console.log(`  1. Append "|| ^${tuple}-0" to the @deepseek-ai/dsh-* peer range in package.json`)
-console.log('     ("-0" is that tuple\'s lowest prerelease, so later rc/alpha rolls of the same')
-console.log('     tuple need no edit; once DSH ships a final release the union can converge to a')
-console.log('     single stable range).')
-console.log('  2. Re-verify the compile-time types against the new DSH: on 0.1.5+ ClientContext is')
-console.log('     the cordis Context and SessionFace lives in @deepseek-ai/dsh-api-session-controller/client.')
-console.log('  3. npm install, rerun typecheck / tests / scripts/verify-host.mjs, then release.')
+const [tag, { version, tuple }] = ahead.sort((a, b) => compareTuples(a[1].tuple, b[1].tuple)).at(-1)
+console.log(`ACTION NEEDED: DSH ${version} (tag "${tag}") is on a tuple the peer range does not cover.`)
+console.log(`  1. Verify the plugin against that DSH line (a local monorepo checkout of the tag is the`)
+console.log('     reference: docs/subsystems/ + packages/client/*/src).')
+console.log(`  2. Point every @deepseek-ai/dsh-* peer AND devDependency at the verified tuple:`)
+console.log(`       peer:  "^${tuple}-rc.1" (or "^${tuple}-0" for the whole tuple, prereleases included)`)
+console.log(`       dsh.engines.dsh: ">=${tuple}-rc.1"`)
+console.log('     Note the floor term refuses older lines by design — releases frozen on them keep serving them.')
+console.log('  3. npm install → npm run check → release.')
 process.exit(1)
