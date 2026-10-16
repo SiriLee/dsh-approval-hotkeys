@@ -320,6 +320,25 @@ describe('guards', () => {
     expect(spy).not.toHaveBeenCalled()
   })
 
+  it('ignores shifted Enter/Esc, as the harness panel handler does', () => {
+    const { allowOnce, reject } = makeApprovalPanel()
+    const allowSpy = clickSpy(allowOnce)
+    const rejectSpy = clickSpy(reject)
+    expect(dispatch(keyEvent('Enter', document.body, { shiftKey: true }), pending('approval', 'approval:1'))).toBe('none')
+    expect(dispatch(keyEvent('Escape', document.body, { shiftKey: true }), pending('approval', 'approval:1'))).toBe('none')
+    expect(allowSpy).not.toHaveBeenCalled()
+    expect(rejectSpy).not.toHaveBeenCalled()
+  })
+
+  it('ignores a key another handler already claimed (defaultPrevented)', () => {
+    const { allowOnce } = makeApprovalPanel()
+    const spy = clickSpy(allowOnce)
+    const event = keyEvent('Enter', document.body)
+    event.preventDefault()
+    expect(dispatch(event, pending('approval', 'approval:1'))).toBe('none')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
   it('ignores synthetic repeats', () => {
     const { allowOnce } = makeApprovalPanel()
     const spy = clickSpy(allowOnce)

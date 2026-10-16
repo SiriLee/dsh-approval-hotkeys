@@ -26,12 +26,25 @@
  *               the first *visible* panel in DOM order, which is what this
  *               plugin did before it could read the runtime at all.
  *
- * Guards: synthetic repeats, Ctrl/Meta/Alt chords, IME composition (a
- * candidate-confirming Enter must never answer a panel), and keystrokes inside
- * editable seats (composer editor, inputs, contentEditable) are never ours —
- * the composer owns Enter and Esc there. Enter with focus on a button is also
- * left alone: the browser activates the focused button natively, and the
- * question composer submits on Enter itself — acting again would double-fire.
+ * Why this still exists (DSH 0.2.x): the harness now ships its own approval
+ * panel handler, but it is bound to the panel element and requires
+ * `currentTarget.contains(document.activeElement)` — it only fires once the user
+ * has clicked into the panel. This plugin supplies exactly the missing case:
+ * the panel is on screen, focus is elsewhere (the composer, the transcript, a
+ * toolbar), and the user presses Enter/Esc. The two do not double-fire: the
+ * harness handler calls `preventDefault()` and `stopPropagation()` from a
+ * listener inside the React root, and this listener sits on `document`, so a
+ * focused panel's key never reaches it — with the `defaultPrevented` guard as
+ * the second line of defence. Everything below therefore assumes it is
+ * answering for a panel that does NOT own focus.
+ *
+ * Guards: synthetic repeats, Ctrl/Meta/Alt/Shift chords, IME composition (a
+ * candidate-confirming Enter must never answer a panel), a key another handler
+ * already claimed, and keystrokes inside editable seats (composer editor,
+ * inputs, contentEditable) are never ours — the composer owns Enter and Esc
+ * there. Enter with focus on a button is also left alone: the browser activates
+ * the focused button natively, and the question composer submits on Enter
+ * itself — acting again would double-fire.
  *
  * Button resolution skips tool buttons declared as non-hotkey targets: any
  * plugin may mark a button with `data-hotkey="none"` (e.g. a diff collapse
@@ -129,9 +142,14 @@ function isEditable(target: EventTarget | null): boolean {
   return false
 }
 
-/** Synthetic repeats and chorded shortcuts are never ours. */
+/**
+ * Synthetic repeats, chorded shortcuts, and shifted gestures are never ours.
+ * `Shift` is included to match the harness's own panel handler, which ignores
+ * every modifier: a modified Enter is a different intent (line break, queue,
+ * chord), not a plain answer.
+ */
 function isChord(event: KeyboardEvent): boolean {
-  return event.repeat || event.ctrlKey || event.metaKey || event.altKey
+  return event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey
 }
 
 /**
@@ -242,6 +260,11 @@ function locateButton(panel: HTMLElement, locator: ButtonLocator): HTMLButtonEle
  * @returns the action taken.
  */
 export function dispatch(event: KeyboardEvent, target: TargetResolution = UNKNOWN_TARGET): HotkeyAction {
+  // `defaultPrevented`: another handler already claimed this key. The harness's
+  // own approval-panel handler (focused case, see the module doc) calls
+  // preventDefault and stops propagation, so this is the second line of defence
+  // behind that stop — and it keeps any other plugin's claim authoritative.
+  if (event.defaultPrevented) return 'none'
   if (isChord(event) || isComposing(event) || isEditable(event.target)) return 'none'
   const panel = findPanel(target)
   if (event.key === 'Enter') {
