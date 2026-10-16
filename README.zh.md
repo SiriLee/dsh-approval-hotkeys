@@ -52,7 +52,9 @@ dsh plugin --profile web add dsh-approval-hotkeys
 
 重启 `dsh web`——或直接刷新页面（本插件纯浏览器端，host 未变时刷新即加载新 client bundle）。无需任何配置。
 
-兼容范围：**DSH `0.1.7-rc.1` 及 `0.1` 线上更晚的版本**——以可选 peer 形式声明在 client 半面实际读取的两个服务上（`@deepseek-ai/dsh-api-session-controller`、`@deepseek-ai/dsh-client-ui-session`），并声明 `dsh.engines.dsh`。**一次发布只对一条 DSH 线**：harness 在同一条线内删过 client API（`SessionListState.current`、`uiSession.pendingInteractions`），旧线用户由冻结点在旧线的版本继续服务。另注意：自 `0.1.7-rc.1` 起，harness 会在启动时用运行版本校验 profile bundle 自身的 `@deepseek-ai/dsh-*` peer，任一项不满足就**跳过整个 bundle**——过期的 peer 范围现在会让插件直接不加载，而不是打一条警告。范围策略见 [docs/release.md](docs/release.md)。
+兼容范围：**DSH `0.2.0-rc.2` 起、不含 `0.3.0`**，以 `dsh.engines.dsh` 声明，并在两端都核实过（`0.2.0-rc.2`＝npm `latest`，`0.2.1-alpha.5`＝npm `alpha`）。自 DSH 0.2.x 起，这**一个字段就独占决定**准入——它存在时 harness 完全忽略 peer 范围——窗口不接受的版本会在启动时**整个被跳过**，所以窗口带上界，而不是放进一条未核实的新线。一次发布只对一条 DSH 线，旧线由冻结点在旧线的版本继续服务。范围策略见 [docs/release.md](docs/release.md)。
+
+为什么还需要本插件：harness 现在自带审批快捷键，但它绑定在面板元素上、且要求焦点已在面板内（`currentTarget.contains(document.activeElement)`），所以必须先点一下面板。本插件补的正是缺的那一半——面板在场、焦点在别处。两者不会重复触发：官方处理器在 React 根内部就 `preventDefault()` + `stopPropagation()`，而本监听器挂在它上层的 `document`，并且同样忽略已被 preventDefault 的按键。
 
 贡献者：本地 checkout 或固定 commit 安装——`dsh plugin --profile web add /path/to/dsh-approval-hotkeys` 或 `dsh plugin --profile web add github:SiriLee/dsh-approval-hotkeys#<sha>`。git 安装首次会失败：pnpm 默认阻止 git 依赖执行构建脚本，按提示在 profile 的 `pnpm-workspace.yaml` 添加 `allowBuilds` 键后重试，之后会运行插件 `prepare` 并完成安装。
 
