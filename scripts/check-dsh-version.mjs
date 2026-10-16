@@ -1,30 +1,23 @@
 #!/usr/bin/env node
 /**
- * check-dsh-version.mjs — watch the DSH release cadence without watching the repo.
+ * check-dsh-version.mjs — is a published DSH release outside the declared window?
  *
- * DSH publishes every @deepseek-ai/dsh-* package at the same version, so the
- * registry's dist-tags are the authoritative release signal. DSH keeps
- * pre-releases on their own tags: `latest` trails at the last promoted release
- * while `next`/`alpha` carry the line under development. Probing `latest` alone
- * therefore misses exactly the releases this plugin has to adapt to — 0.1.7-rc.1
- * shipped under `next` while `latest` still said 0.1.5-rc.3, which is why the
- * 0.1.7 tuple went unnoticed. This script compares the HIGHEST tuple published
- * under ANY dist-tag against the tuples the peer range covers.
+ * DSH publishes every @deepseek-ai/dsh-* package at one version but spreads the
+ * releases across dist-tags: 0.1.7-rc.1 shipped under `next` while `latest` said
+ * 0.1.5-rc.3, and 0.2.1-alpha.5 sits under `alpha` while `latest` says
+ * 0.2.0-rc.2. Reading every tag is the only way not to miss a line, and missing
+ * one is exactly how the 0.1.7 adaptation went unnoticed.
  *
- * Peer-range rule: npm's prerelease matching only accepts a prerelease
- * candidate when the range carries a comparator on the SAME [major, minor,
- * patch] tuple, so the range carries one `^<tuple>-0` term per supported tuple:
- *   "^0.1.7-rc.1"
- * `-0` is a tuple's lowest prerelease, so same-tuple rolls (rc.2 → rc.3, or an
- * alpha series) need no edit — while a NEW tuple stops matching until its own
- * `^<tuple>-0` term is appended. Note that a *floor* term (`^0.1.7-rc.1`) also
- * refuses anything below it, which is deliberate: this plugin targets one DSH
- * line, and older lines are served by the release frozen on them.
+ * Since DSH 0.2.x, `dsh.engines.dsh` decides plugin admission ALONE — the
+ * harness ignores peer ranges when it is present — so that range is the probe.
+ * It carries both ends: a floor that refuses older lines (releases frozen on
+ * them keep serving them) and a ceiling that refuses the next tuple instead of
+ * admitting it the day it is published, unchecked.
  *
  * Exit:
- *   0 — every published tuple is covered (or merely behind the covered floor).
- *   1 — a tuple ahead of the covered range is published; append its term.
- *   2 — registry unreachable or unparseable (never reported as "OK").
+ *   0 — every published dist-tag is inside the declared window.
+ *   1 — one is outside it: verify that line, then move the window and the pins.
+ *   2 — registry unreachable, or the declared window is unusable.
  */
 
 import { readFileSync } from 'node:fs'
@@ -35,6 +28,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const MANIFEST = JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf8'))
 const PROBE_URL = 'https://registry.npmjs.org/@deepseek-ai/dsh'
 
+/** `x.y.z` of a version, or null. */
 const tupleOf = (version) => {
   const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version.trim())
   return match === null ? null : `${match[1]}.${match[2]}.${match[3]}`
@@ -48,17 +42,46 @@ const compareTuples = (left, right) => {
   }
   return 0
 }
-
-const peers = Object.keys(MANIFEST.peerDependencies ?? {}).filter((name) => name.startsWith('@deepseek-ai/dsh'))
-if (peers.length === 0) {
-  console.log('check-dsh-version: no @deepseek-ai/dsh-* peer declared — nothing to track')
-  process.exit(0)
+/**
+ * The window's floor and ceiling tuples. Only the ends matter: tuple comparison
+ * answers "is this release inside the window", which is the question the
+ * harness's admission gate asks.
+ */
+function windowOf(range) {
+  const lower = new Set()
+  const upper = new Set()
+  for (const match of range.matchAll(/(\^|~|>=|<=|>|<|=)?\s*v?(\d+)\.(\d+)\.(\d+)/g)) {
+    const tuple = `${match[2]}.${match[3]}.${match[4]}`
+    const operator = match[1] ?? '='
+    if (operator === '<' || operator === '<=') upper.add(tuple)
+    else lower.add(tuple)
+  }
+  const sorted = (set) => [...set].sort(compareTuples)
+  return {
+    floor: lower.size === 0 ? undefined : sorted(lower).at(-1),
+    ceiling: upper.size === 0 ? undefined : sorted(upper)[0],
+  }
 }
 
-const probe = MANIFEST.peerDependencies[peers[0]]
-const covered = new Set()
-for (const match of probe.matchAll(/(\d+)\.(\d+)\.(\d+)/g)) covered.add(`${match[1]}.${match[2]}.${match[3]}`)
-const floor = [...covered].sort(compareTuples).at(-1)
+// `engines.dsh` is what the harness reads; the peer list stays as metadata and
+// as the fallback probe for a package that declares no window.
+const enginesRange = MANIFEST.dsh?.engines?.dsh
+const peers = Object.keys(MANIFEST.peerDependencies ?? {}).filter((name) => name.startsWith('@deepseek-ai/dsh'))
+const declared = typeof enginesRange === 'string' && enginesRange !== '' ? enginesRange : MANIFEST.peerDependencies?.[peers[0]]
+const declaredBy = typeof enginesRange === 'string' && enginesRange !== ''
+  ? 'dsh.engines.dsh'
+  : peers.length > 0 ? `peer ${peers[0]}` : undefined
+if (declaredBy === undefined) {
+  console.log('check-dsh-version: neither dsh.engines.dsh nor a @deepseek-ai/dsh-* peer is declared — nothing to track')
+  process.exit(0)
+}
+const { floor, ceiling } = windowOf(declared)
+if (floor === undefined) {
+  console.error(`check-dsh-version: ${declaredBy} "${declared}" declares no lower bound; nothing to compare against`)
+  process.exit(2)
+}
+/** Whether a published tuple falls inside the declared window. */
+const inside = (tuple) => compareTuples(tuple, floor) >= 0 && (ceiling === undefined || compareTuples(tuple, ceiling) < 0)
 
 let tags
 try {
@@ -85,25 +108,25 @@ for (const [tag, version] of Object.entries(tags)) {
   published.set(tag, { version, tuple })
 }
 
-console.log(`probe peer:   ${peers[0]} = "${probe}"`)
-console.log(`covered:      ${[...covered].sort(compareTuples).join(', ')} (floor ${floor})`)
+console.log(`declared:     ${declaredBy} = "${declared}"`)
+console.log(`window:       ${floor} <= dsh < ${ceiling ?? 'infinity'}${ceiling === undefined ? '  (unbounded: the next line is admitted the day it is published)' : ''}`)
 for (const [tag, { version, tuple }] of [...published].sort((a, b) => compareTuples(a[1].tuple, b[1].tuple))) {
-  console.log(`dist-tag:     ${tag.padEnd(8)} ${version}${tuple > floor ? '  <-- ahead of the covered range' : ''}`)
+  console.log(`dist-tag:     ${tag.padEnd(8)} ${version}${inside(tuple) ? '' : '  <-- OUTSIDE the declared window'}`)
 }
 
-const ahead = [...published].filter(([, { tuple }]) => compareTuples(tuple, floor) > 0)
-if (ahead.length === 0) {
-  console.log('OK: no published dist-tag is ahead of the covered DSH tuples.')
+const outside = [...published].filter(([, { tuple }]) => !inside(tuple))
+if (outside.length === 0) {
+  console.log('OK: every published dist-tag is inside the declared window.')
   process.exit(0)
 }
 
-const [tag, { version, tuple }] = ahead.sort((a, b) => compareTuples(a[1].tuple, b[1].tuple)).at(-1)
-console.log(`ACTION NEEDED: DSH ${version} (tag "${tag}") is on a tuple the peer range does not cover.`)
-console.log(`  1. Verify the plugin against that DSH line (a local monorepo checkout of the tag is the`)
-console.log('     reference: docs/subsystems/ + packages/client/*/src).')
-console.log(`  2. Point every @deepseek-ai/dsh-* peer AND devDependency at the verified tuple:`)
-console.log(`       peer:  "^${tuple}-rc.1" (or "^${tuple}-0" for the whole tuple, prereleases included)`)
-console.log(`       dsh.engines.dsh: ">=${tuple}-rc.1"`)
-console.log('     Note the floor term refuses older lines by design — releases frozen on them keep serving them.')
+const [tag, { version }] = outside.sort((a, b) => compareTuples(a[1].tuple, b[1].tuple)).at(-1)
+console.log(`ACTION NEEDED: DSH ${version} (tag "${tag}") is outside the declared window.`)
+console.log('  1. Verify the plugin against that line: a local monorepo checkout of the tag')
+console.log('     (docs/subsystems/ + packages/client/*/src) plus the published tarballs, which show')
+console.log('     what the client panels and .d.ts actually shipped.')
+console.log('  2. Move the window and the pins together — dsh.engines.dsh is the only range DSH reads:')
+console.log('       dsh.engines.dsh: ">=<verified release> <next tuple>.0-0"')
+console.log('     then point every @deepseek-ai/dsh-* devDependency at the verified release.')
 console.log('  3. npm install → npm run check → release.')
 process.exit(1)

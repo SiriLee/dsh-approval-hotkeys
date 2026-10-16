@@ -38,10 +38,15 @@ const check = (name, ok, detail = '') => {
 // 1. the dsh.client declaration
 check('dsh.client.platform is web', pkg.dsh?.client?.platform === 'web', String(pkg.dsh?.client?.platform))
 check('exports a ./client bundle', typeof pkg.exports?.['./client']?.default === 'string', 'missing')
+// `engines.dsh` decides plugin admission ALONE since DSH 0.2.x — the harness
+// ignores peer ranges when it is present — so it needs both ends: an unbounded
+// floor would admit the next DSH line the day it publishes, before anyone
+// checked this plugin's client contract against it.
+const dshWindow = pkg.dsh?.engines?.dsh
 check(
-  'declared dsh runtime floor',
-  typeof pkg.dsh?.engines?.dsh === 'string' && pkg.dsh.engines.dsh !== '',
-  String(pkg.dsh?.engines?.dsh),
+  'declared a bounded dsh window',
+  typeof dshWindow === 'string' && dshWindow.includes('>=') && dshWindow.includes('<'),
+  String(dshWindow),
 )
 
 // The card's display text comes from the package's own dictionaries: the
